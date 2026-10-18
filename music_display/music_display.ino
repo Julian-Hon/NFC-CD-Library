@@ -14,8 +14,18 @@
 
 TFT_eSPI tft = TFT_eSPI();
 
-String lastTrack = "";
-String lastImageUrl = "";
+struct TrackInfo {
+  String song;
+  String artist;
+  String album;
+  String imageUrl;
+  bool nowPlaying;
+};
+
+TrackInfo lastNowPlayingTrack;
+TrackInfo displayedTrack;
+bool hasLastNowPlayingTrack = false;
+bool hasDisplayedTrack = false;
 
 // JPEG drawing callback
 bool tft_output(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap) {
@@ -311,49 +321,61 @@ void getCurrentSong() {
     return;
   }
 
-  String song   = track["name"] | "Unknown";
-  String artist = track["artist"]["#text"] | "Unknown";
-  String album  = track["album"]["#text"] | "Unknown";
+  TrackInfo current;
+  current.song = track["name"] | "Unknown";
+  current.artist = track["artist"]["#text"] | "Unknown";
+  current.album = track["album"]["#text"] | "Unknown";
   String playing = track["@attr"]["nowplaying"] | "false";
-  bool nowPlaying = (playing == "true");
+  current.nowPlaying = (playing == "true");
+  current.imageUrl = pickImageUrl(track["image"].as<JsonArray>());
 
+  // Convert artwork to a smaller JPEG.
+  if (current.imageUrl.length() > 0) {
+    current.imageUrl = "https://wsrv.nl/?url=" + current.imageUrl +
+                       "&w=174&output=jpg&q=80";
+  }
 
-String imageUrl = pickImageUrl(
-  track["image"].as<JsonArray>()
-);
+  if (current.nowPlaying) {
+    // Remember the newest track even before Last.fm has scrobbled it.
+    lastNowPlayingTrack = current;
+    hasLastNowPlayingTrack = true;
+  } else if (hasLastNowPlayingTrack) {
+    // During ads, Last.fm may fall back to an older completed scrobble.
+    current = lastNowPlayingTrack;
+    current.nowPlaying = false;
+  }
 
-// Convert artwork to a smaller JPEG
-if (imageUrl.length() > 0) {
-  imageUrl =
-    "https://wsrv.nl/?url=" +
-    imageUrl +
-    "&w=174&output=jpg&q=80";
-}
+  bool artworkChanged = !hasDisplayedTrack ||
+                        current.imageUrl != displayedTrack.imageUrl;
+  bool artworkDownloaded = false;
 
-Serial.println("Converted image URL:");
-Serial.println(imageUrl);
-
-
-  Serial.println("Song: " + song);
-  Serial.println("Artist: " + artist);
-  Serial.println("Album: " + album);
-  Serial.println("Image: " + imageUrl);
-
-  // Download new image only if track changed
-  if (song != lastTrack || imageUrl != lastImageUrl) {
+  if (artworkChanged) {
     if (LittleFS.exists("/cover.jpg")) {
       LittleFS.remove("/cover.jpg");
     }
-
-    if (imageUrl.length() > 0) {
-      downloadImage(imageUrl, "/cover.jpg");
-    }
-
-    lastTrack = song;
-    lastImageUrl = imageUrl;
   }
 
-  drawScreen(song, artist, album, nowPlaying);
+  if (current.imageUrl.length() > 0 &&
+      (artworkChanged || !LittleFS.exists("/cover.jpg"))) {
+    artworkDownloaded = downloadImage(current.imageUrl, "/cover.jpg");
+  }
+
+  bool displayChanged = !hasDisplayedTrack ||
+                        current.song != displayedTrack.song ||
+                        current.artist != displayedTrack.artist ||
+                        current.album != displayedTrack.album ||
+                        current.imageUrl != displayedTrack.imageUrl ||
+                        current.nowPlaying != displayedTrack.nowPlaying ||
+                        artworkDownloaded;
+
+  if (!displayChanged) {
+    Serial.println("Track unchanged; keeping the current screen");
+    return;
+  }
+
+  drawScreen(current.song, current.artist, current.album, current.nowPlaying);
+  displayedTrack = current;
+  hasDisplayedTrack = true;
 }
 
 // ---------------- SETUP / LOOP ----------------
