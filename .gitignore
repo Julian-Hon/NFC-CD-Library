@@ -1,0 +1,9 @@
+# Local credentials
+secrets.h
+
+# Arduino and editor build output
+build/
+.pio/
+*.bin
+*.elf
+*.map
