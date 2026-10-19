@@ -17,9 +17,25 @@
     <main class="library" aria-labelledby="library-title">
       <div class="section-heading">
         <div><h1 id="library-title">My library<span class="period">.</span></h1><span id="cd-count" class="count">0 CDs</span></div>
-        <button id="add-cd" class="primary-button" type="button">+ Add CD</button>
+        <div class="library-actions">
+          <div id="view-switch" class="view-switch" role="group" aria-label="Library view" hidden>
+            <button id="grid-view" type="button" aria-pressed="true">Grid</button>
+            <button id="stack-view-button" type="button" aria-pressed="false">Stack</button>
+          </div>
+          <button id="add-cd" class="primary-button" type="button">+ Add CD</button>
+        </div>
       </div>
       <div id="album-grid" class="album-grid" aria-live="polite"></div>
+      <section id="stack-view" class="stack-view" aria-label="CD stack" hidden>
+        <p class="stack-hint">Choose a case to bring it forward. Select the front case to open it.</p>
+        <div id="cd-stack" class="cd-stack"></div>
+        <div class="stack-navigation">
+          <button id="stack-previous" class="stack-arrow" type="button" aria-label="Previous CD">←</button>
+          <div class="stack-current"><span id="stack-position" class="stack-position"></span><h2 id="stack-album"></h2><p id="stack-artist"></p></div>
+          <button id="stack-next" class="stack-arrow" type="button" aria-label="Next CD">→</button>
+        </div>
+        <button id="stack-open" class="stack-open" type="button">View CD details</button>
+      </section>
       <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true">◎</div><h2>No CDs yet.</h2><p>Add an album to start your library.</p></div>
       <p class="storage-note">Your library is saved in this browser.</p>
     </main>

@@ -7,7 +7,9 @@ const searchForm = document.querySelector('#search-form');
 const status = document.querySelector('#search-status');
 const results = document.querySelector('#search-results');
 const grid = document.querySelector('#album-grid');
-const state = { cds: loadCds(), selected: null, mode: 'new', lastRequestAt: 0 };
+const stackView = document.querySelector('#stack-view');
+const stack = document.querySelector('#cd-stack');
+const state = { cds: loadCds(), selected: null, mode: 'new', view: 'grid', activeIndex: 0, lastRequestAt: 0 };
 const requestCache = new Map();
 let requestQueue = Promise.resolve();
 
@@ -62,7 +64,16 @@ function cover(container, releaseId, releaseGroupId) {
 function renderLibrary() {
   document.querySelector('#cd-count').textContent = `${state.cds.length} ${state.cds.length === 1 ? 'CD' : 'CDs'}`;
   document.querySelector('#empty-state').hidden = state.cds.length > 0;
+  document.querySelector('#view-switch').hidden = state.cds.length === 0;
+  grid.hidden = state.cds.length === 0 || state.view !== 'grid';
+  stackView.hidden = state.cds.length === 0 || state.view !== 'stack';
+  document.querySelector('#grid-view').setAttribute('aria-pressed', state.view === 'grid');
+  document.querySelector('#stack-view-button').setAttribute('aria-pressed', state.view === 'stack');
   grid.replaceChildren();
+  if (state.view === 'stack') {
+    renderStack();
+    return;
+  }
   for (const cd of state.cds) {
     const card = document.createElement('button');
     card.className = 'album-card';
@@ -78,6 +89,65 @@ function renderLibrary() {
     card.addEventListener('click', () => showDetails(cd, 'saved'));
     grid.append(card);
   }
+}
+
+function renderStack() {
+  if (!state.cds.length) {
+    stack.replaceChildren();
+    return;
+  }
+  state.activeIndex = Math.min(state.activeIndex, state.cds.length - 1);
+  const active = state.cds[state.activeIndex];
+  const first = Math.max(0, state.activeIndex - 3);
+  const last = Math.min(state.cds.length - 1, state.activeIndex + 3);
+  const visibleIds = new Set(state.cds.slice(first, last + 1).map(cd => cd.id));
+  for (const caseButton of [...stack.children]) {
+    if (!visibleIds.has(caseButton.dataset.id)) caseButton.remove();
+  }
+  const existing = new Map([...stack.children].map(caseButton => [caseButton.dataset.id, caseButton]));
+  for (let index = first; index <= last; index++) {
+    const cd = state.cds[index];
+    const offset = index - state.activeIndex;
+    let caseButton = existing.get(cd.id);
+    if (!caseButton) {
+      caseButton = document.createElement('button');
+      caseButton.type = 'button';
+      caseButton.className = 'stack-case';
+      caseButton.dataset.id = cd.id;
+      const art = document.createElement('div');
+      art.className = 'stack-art';
+      cover(art, cd.id, cd.releaseGroupId);
+      caseButton.append(art);
+      stack.append(caseButton);
+    }
+    caseButton.setAttribute('aria-label', `${offset === 0 ? 'Open' : 'Select'} ${cd.album} by ${cd.artist}`);
+    caseButton.setAttribute('aria-current', offset === 0 ? 'true' : 'false');
+    caseButton.style.setProperty('--offset', offset);
+    caseButton.style.setProperty('--distance', Math.abs(offset));
+    caseButton.style.zIndex = String(10 - Math.abs(offset));
+    caseButton.onclick = () => {
+      if (index === state.activeIndex) showDetails(cd, 'saved');
+      else {
+        state.activeIndex = index;
+        renderStack();
+        stack.querySelector('[aria-current="true"]')?.focus({ preventScroll: true });
+      }
+    };
+  }
+  document.querySelector('#stack-position').textContent = `${state.activeIndex + 1} / ${state.cds.length}`;
+  document.querySelector('#stack-album').textContent = active.album;
+  document.querySelector('#stack-artist').textContent = active.artist;
+  document.querySelector('#stack-previous').disabled = state.activeIndex === 0;
+  document.querySelector('#stack-next').disabled = state.activeIndex === state.cds.length - 1;
+}
+
+function moveStack(step) {
+  const next = state.activeIndex + step;
+  if (next < 0 || next >= state.cds.length) return;
+  const caseHadFocus = stack.contains(document.activeElement);
+  state.activeIndex = next;
+  renderStack();
+  if (caseHadFocus) stack.querySelector('[aria-current="true"]')?.focus({ preventScroll: true });
 }
 
 function setStatus(message, isError = false) {
@@ -243,6 +313,23 @@ function showDetails(cd, mode) {
 }
 
 document.querySelector('#add-cd').addEventListener('click', openAdd);
+document.querySelector('#grid-view').addEventListener('click', () => {
+  state.view = 'grid';
+  renderLibrary();
+});
+document.querySelector('#stack-view-button').addEventListener('click', () => {
+  state.view = 'stack';
+  renderLibrary();
+});
+document.querySelector('#stack-previous').addEventListener('click', () => moveStack(-1));
+document.querySelector('#stack-next').addEventListener('click', () => moveStack(1));
+document.querySelector('#stack-open').addEventListener('click', () => showDetails(state.cds[state.activeIndex], 'saved'));
+stackView.addEventListener('keydown', event => {
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.preventDefault();
+    moveStack(event.key === 'ArrowLeft' ? -1 : 1);
+  }
+});
 document.querySelector('#close-dialog').addEventListener('click', () => dialog.close());
 document.querySelector('#back-to-results').addEventListener('click', showSearch);
 searchForm.addEventListener('submit', async event => {
@@ -274,6 +361,7 @@ document.querySelector('#save-cd').addEventListener('click', () => {
     state.cds.shift();
     return;
   }
+  state.activeIndex = 0;
   renderLibrary();
   dialog.close();
 });

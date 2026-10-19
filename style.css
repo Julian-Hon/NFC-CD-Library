@@ -117,11 +117,23 @@ button:focus-visible, input:focus-visible, .album-card:focus-visible {
 }
 [hidden] { display: none !important; }
 
-.section-heading > div {
+.section-heading > div:first-child {
   display: flex;
   align-items: baseline;
   gap: 20px;
 }
+.library-actions { display: flex; align-items: center; gap: 14px; }
+.view-switch { display: flex; padding: 4px; border-radius: 9px; background: #f1f3f8; }
+.view-switch button {
+  border: 0;
+  border-radius: 6px;
+  padding: 9px 13px;
+  color: var(--muted);
+  background: transparent;
+  font-size: .85rem;
+  font-weight: 700;
+}
+.view-switch button[aria-pressed="true"] { color: var(--accent); background: white; box-shadow: 0 1px 5px #20242a17; }
 
 .primary-button {
   border: 0;
@@ -177,6 +189,73 @@ button:focus-visible, input:focus-visible, .album-card:focus-visible {
   margin-top: 4px;
   color: var(--muted);
   font-size: .82rem;
+}
+
+.stack-view {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: radial-gradient(ellipse at 50% 36%, #fff 0%, #f4f6fb 72%);
+  padding: 24px 20px 30px;
+  text-align: center;
+  overflow: hidden;
+}
+.stack-hint { margin: 0; color: var(--muted); font-size: .85rem; }
+.cd-stack {
+  --stack-step: clamp(28px, 5vw, 62px);
+  position: relative;
+  height: 430px;
+  perspective: 1000px;
+  perspective-origin: 50% 42%;
+}
+.stack-case {
+  position: absolute;
+  top: 47%;
+  left: 50%;
+  width: min(35vw, 310px);
+  aspect-ratio: 1;
+  padding: 9px;
+  border: 1px solid #ccd2dd;
+  border-radius: 5px;
+  background: linear-gradient(115deg, #fff, #e6ebf3 78%, #cbd2de);
+  box-shadow: 10px 17px 28px #1b294447, inset 2px 2px 2px #ffffffcc;
+  transform-style: preserve-3d;
+  transform: translate(-50%, -50%) translate3d(calc(var(--offset) * var(--stack-step)), calc(var(--distance) * 13px), calc(var(--distance) * -55px)) rotateY(calc(var(--offset) * -8deg)) rotateZ(calc(var(--offset) * 1.5deg));
+  transition: transform .35s ease, box-shadow .35s ease;
+}
+.stack-case::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: -9px;
+  width: 8px;
+  border-radius: 3px 0 0 3px;
+  background: linear-gradient(90deg, #aeb8c8, #f9fbff);
+  border: 1px solid #b7bfcd;
+}
+.stack-case::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-top: 3px solid #ffffffa8;
+  border-left: 2px solid #ffffff8a;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.stack-case:hover { box-shadow: 13px 20px 32px #1b29445c, inset 2px 2px 2px #ffffffcc; }
+.stack-art, .stack-art .album-cover { width: 100%; height: 100%; border-radius: 2px; }
+.stack-navigation { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 18px; width: min(480px, 100%); margin: auto; }
+.stack-arrow { width: 44px; height: 44px; border: 1px solid #d5dbea; border-radius: 50%; color: var(--accent); background: white; font-size: 1.3rem; }
+.stack-arrow:hover:not(:disabled) { background: var(--tint); }
+.stack-arrow:disabled { opacity: .35; }
+.stack-position { color: var(--accent); font-size: .75rem; font-weight: 800; letter-spacing: .13em; }
+.stack-current h2 { margin: 5px 0 2px; font-size: 1.25rem; letter-spacing: -.03em; }
+.stack-current p { margin: 0; color: var(--muted); font-size: .9rem; }
+.stack-open { margin-top: 18px; padding: 10px 15px; border: 1px solid #cbd5ff; border-radius: 7px; color: var(--accent); background: white; font-weight: 700; }
+.stack-open:hover { background: var(--tint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .stack-case { transition: none; }
 }
 
 dialog {
@@ -284,10 +363,15 @@ dialog::backdrop { background: #182037a6; }
 .data-credit a { color: var(--accent); }
 
 @media (max-width: 520px) {
-  .section-heading { align-items: start; }
-  .section-heading > div { display: block; }
+  .section-heading { align-items: start; flex-direction: column; }
+  .section-heading > div:first-child { display: block; }
   .section-heading h1 { margin-bottom: 12px; }
+  .library-actions { width: 100%; justify-content: space-between; }
   .album-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .stack-view { padding: 20px 10px 26px; }
+  .cd-stack { height: 330px; }
+  .stack-case { width: min(56vw, 230px); padding: 6px; }
+  .stack-navigation { gap: 8px; }
   #search-form { grid-template-columns: 1fr; }
   .release-detail { grid-template-columns: 96px 1fr; gap: 13px; }
   .detail-cover { width: 96px; height: 96px; }
