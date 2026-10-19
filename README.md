@@ -4,7 +4,7 @@ An ESP32 sketch that shows the latest track from Last.fm on a TFT display, inclu
 
 ## Digital CD Library webpage
 
-The first, static version of the companion website is in [`digital-cd-library/`](digital-cd-library/). Open [`digital-cd-library/index.html`](digital-cd-library/index.html) in a browser to view it. Album storage, accounts, and NFC integration are future steps.
+The first, static version of the companion website is at the repository root. Open [`index.html`](index.html) in a browser to view it. Album storage, accounts, and NFC integration are future steps.
 
 ## Setup
 
