@@ -1,5 +1,6 @@
 const STORAGE_KEY = 'digital-cd-library:cds:v1';
 const VIEW_KEY = 'digital-cd-library:view:v1';
+const MOTION_KEY = 'digital-cd-library:motion:v1';
 const MUSICBRAINZ = 'https://musicbrainz.org/ws/2';
 const COVER_ART = 'https://coverartarchive.org';
 
@@ -11,7 +12,7 @@ const grid = document.querySelector('#album-grid');
 const stackView = document.querySelector('#stack-view');
 const stack = document.querySelector('#cd-stack');
 const stackPeek = document.querySelector('#stack-peek');
-const state = { cds: loadCds(), selected: null, mode: 'new', view: loadView(), activeIndex: 0, lastRequestAt: 0, transitioning: false };
+const state = { cds: loadCds(), selected: null, mode: 'new', view: loadView(), animateStack: loadMotion(), activeIndex: 0, lastRequestAt: 0, transitioning: false };
 const requestCache = new Map();
 let requestQueue = Promise.resolve();
 let stackDrag = null;
@@ -32,6 +33,21 @@ function loadView() {
   } catch {
     return 'grid';
   }
+}
+
+function loadMotion() {
+  try {
+    return localStorage.getItem(MOTION_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+function updateStackMotion() {
+  stackView.classList.toggle('motion-off', !state.animateStack);
+  const button = document.querySelector('#stack-motion');
+  button.setAttribute('aria-pressed', String(state.animateStack));
+  button.textContent = state.animateStack ? 'Animation on' : 'Animation off';
 }
 
 function setView(view) {
@@ -85,6 +101,7 @@ function cover(container, releaseId, releaseGroupId) {
 }
 
 function renderLibrary() {
+  updateStackMotion();
   document.querySelector('#cd-count').textContent = `${state.cds.length} ${state.cds.length === 1 ? 'CD' : 'CDs'}`;
   const emptyState = document.querySelector('#empty-state');
   emptyState.hidden = state.cds.length > 0;
@@ -201,13 +218,13 @@ async function transitionStackTo(nextIndex, direction) {
   if (state.transitioning || nextIndex === state.activeIndex || state.cds.length < 2) return;
   const oldTop = stack.querySelector('.stack-case[aria-current="true"]');
   const caseHadFocus = stack.contains(document.activeElement);
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const animateStack = state.animateStack;
   state.transitioning = true;
   stackView.classList.add('is-traveling');
   stackView.setAttribute('aria-busy', 'true');
   hideStackPeek();
   try {
-    if (!reducedMotion && oldTop) {
+    if (animateStack && oldTop) {
       const stageRect = stack.getBoundingClientRect();
       const caseRect = oldTop.getBoundingClientRect();
       const currentTranslate = getComputedStyle(oldTop).translate;
@@ -434,6 +451,15 @@ function showDetails(cd, mode) {
 document.querySelector('#add-cd').addEventListener('click', openAdd);
 document.querySelector('#grid-view').addEventListener('click', () => setView('grid'));
 document.querySelector('#stack-view-button').addEventListener('click', () => setView('stack'));
+document.querySelector('#stack-motion').addEventListener('click', () => {
+  state.animateStack = !state.animateStack;
+  try {
+    localStorage.setItem(MOTION_KEY, state.animateStack ? 'on' : 'off');
+  } catch {
+    // Animation still works when storage is unavailable.
+  }
+  updateStackMotion();
+});
 document.querySelector('#stack-previous').addEventListener('click', () => moveStack(-1));
 document.querySelector('#stack-next').addEventListener('click', () => moveStack(1));
 document.querySelector('#stack-open').addEventListener('click', () => {

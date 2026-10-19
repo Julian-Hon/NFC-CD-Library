@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f7f5">
   <meta name="description" content="Digital CD Library — catalog your physical CD collection.">
   <title>Digital CD Library</title>
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <div class="page">
@@ -27,7 +27,10 @@
       </div>
       <div id="album-grid" class="album-grid" aria-live="polite"></div>
       <section id="stack-view" class="stack-view" aria-label="CD stack" hidden>
-        <p class="stack-hint">Slide the top case aside to sift through your CDs.</p>
+        <div class="stack-toolbar">
+          <p class="stack-hint">Slide the top case aside to sift through your CDs.</p>
+          <button id="stack-motion" class="stack-motion" type="button" aria-pressed="true">Animation on</button>
+        </div>
         <div id="cd-stack" class="cd-stack">
           <div id="stack-peek" class="stack-peek" aria-hidden="true" hidden>
             <span id="stack-peek-position" class="stack-peek-position"></span>
@@ -72,6 +75,6 @@
     </div>
     <p class="data-credit">Album data from <a href="https://musicbrainz.org/" target="_blank" rel="noopener noreferrer">MusicBrainz</a> · Covers from <a href="https://coverartarchive.org/" target="_blank" rel="noopener noreferrer">Cover Art Archive</a></p>
   </dialog>
-  <script src="app.js?v=4" defer></script>
+  <script src="app.js?v=5" defer></script>
 </body>
 </html>
