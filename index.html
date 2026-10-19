@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#1d292b">
-  <meta name="description" content="Digital CD Library — a home for your physical music collection.">
+  <meta name="description" content="Digital CD Library — catalog your physical CD collection.">
   <title>Digital CD Library</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -12,27 +12,12 @@
   <div class="page">
     <header class="site-header">
       <a class="brand" href="index.html" aria-label="Digital CD Library home"><span class="brand-mark" aria-hidden="true">◉</span><span>Digital CD Library</span></a>
-      <span class="header-note">A HOME FOR YOUR MUSIC</span>
     </header>
 
-    <main>
-      <section class="hero" aria-labelledby="page-title">
-        <div class="hero-copy">
-          <p class="eyebrow">YOUR COLLECTION, ONLINE</p>
-          <h1 id="page-title">Every CD has <em>a story.</em></h1>
-          <p class="hero-description">A digital home for the music you own. Soon, you’ll be able to catalog your CDs and find them by scanning an NFC sticker on each case.</p>
-          <a class="hero-link" href="#library">Explore the library <span aria-hidden="true">↗</span></a>
-        </div>
-        <div class="artwork" aria-hidden="true"><div class="sleeve"><div class="record"><div class="record-label"><span>YOUR</span><strong>MUSIC</strong><small>SIDE A · 33⅓ RPM</small></div></div></div></div>
-      </section>
-
-      <section id="library" class="library" aria-labelledby="library-title">
-        <div class="section-heading"><div><p class="eyebrow">THE RECORD SHELF</p><h2 id="library-title">My library<span class="period">.</span></h2></div><span class="count">0 CDs</span></div>
-        <div class="empty-state"><div class="empty-icon" aria-hidden="true">◎</div><h3>Your shelf is waiting.</h3><p>There are no CDs here yet. The next step is adding albums and connecting them to NFC tags.</p></div>
-      </section>
+    <main class="library" aria-labelledby="library-title">
+      <div class="section-heading"><h1 id="library-title">My library<span class="period">.</span></h1><span class="count">0 CDs</span></div>
+      <div class="empty-state"><div class="empty-icon" aria-hidden="true">◎</div><h2>No CDs yet.</h2></div>
     </main>
-
-    <footer><span>Digital CD Library</span><span>Built for an ESP32 music display project</span></footer>
   </div>
 </body>
 </html>
