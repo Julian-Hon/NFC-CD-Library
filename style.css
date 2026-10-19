@@ -235,6 +235,10 @@ dialog::backdrop { background: #16241bc0; }
 .status.error { color: #ad4e3f; }
 .search-results { display: grid; gap: 8px; margin-top: 16px; }
 .result-button {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: center;
+  gap: 13px;
   width: 100%;
   border: 1px solid #e3e5dc;
   border-radius: 8px;
@@ -244,8 +248,11 @@ dialog::backdrop { background: #16241bc0; }
   color: #1e2a2a;
 }
 .result-button:hover { border-color: #d09377; background: #fff8f2; }
+.result-cover { width: 68px; height: 68px; }
+.result-cover .album-cover { width: 100%; height: 100%; font-size: 1.7rem; }
+.result-copy { min-width: 0; }
 .result-button strong, .result-button small { display: block; }
-.result-button small { color: #77837b; margin-top: 4px; }
+.result-button small { color: #77837b; margin-top: 4px; overflow-wrap: anywhere; }
 
 .back-button, .remove-button {
   border: 0;

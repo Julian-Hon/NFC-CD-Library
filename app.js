@@ -122,12 +122,24 @@ function renderResults(releases, inputArtist) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'result-button';
+    const art = document.createElement('div');
+    art.className = 'result-cover';
+    cover(art, release.id, release['release-group']?.id);
+    const copy = document.createElement('div');
+    copy.className = 'result-copy';
     const title = document.createElement('strong');
     title.textContent = `${release.title} — ${artistName(release['artist-credit'], inputArtist)}`;
     const info = document.createElement('small');
     const details = editionLabel(release);
     info.textContent = `${details}${release['track-count'] ? ` · ${release['track-count']} tracks` : ''}`;
-    button.append(title, info);
+    copy.append(title, info);
+    const catalogNumber = release['label-info']?.map(label => label['catalog-number']).find(Boolean);
+    if (catalogNumber || release.barcode) {
+      const identifiers = document.createElement('small');
+      identifiers.textContent = [catalogNumber && `Catalog ${catalogNumber}`, release.barcode && `Barcode ${release.barcode}`].filter(Boolean).join(' · ');
+      copy.append(identifiers);
+    }
+    button.append(art, copy);
     button.addEventListener('click', () => selectRelease(release, inputArtist));
     results.append(button);
   }
