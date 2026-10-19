@@ -96,6 +96,22 @@ h1, h2 { margin: 0; }
   color: #9dacf9;
   margin-bottom: 15px;
 }
+.empty-stack { display: none; position: relative; width: 138px; height: 126px; margin-bottom: 18px; }
+.empty-stack span {
+  position: absolute;
+  width: 94px;
+  height: 94px;
+  border: 3px solid #cfd8ee;
+  border-radius: 4px;
+  background: #eef1ff;
+  box-shadow: 8px 10px 16px #30406721;
+}
+.empty-stack span:nth-child(1) { left: 35px; top: 20px; transform: rotate(11deg); }
+.empty-stack span:nth-child(2) { left: 20px; top: 12px; transform: rotate(4deg); }
+.empty-stack span:nth-child(3) { left: 5px; top: 4px; display: grid; place-items: center; }
+.empty-stack span:nth-child(3)::after { content: '◎'; color: #9dacf9; font-size: 3.5rem; }
+.empty-state.is-stack .empty-icon { display: none; }
+.empty-state.is-stack .empty-stack { display: block; }
 
 .empty-state h2 {
   font-size: 1.7rem;

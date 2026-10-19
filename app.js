@@ -63,7 +63,13 @@ function cover(container, releaseId, releaseGroupId) {
 
 function renderLibrary() {
   document.querySelector('#cd-count').textContent = `${state.cds.length} ${state.cds.length === 1 ? 'CD' : 'CDs'}`;
-  document.querySelector('#empty-state').hidden = state.cds.length > 0;
+  const emptyState = document.querySelector('#empty-state');
+  emptyState.hidden = state.cds.length > 0;
+  emptyState.classList.toggle('is-stack', state.view === 'stack');
+  document.querySelector('#empty-title').textContent = state.view === 'stack' ? 'Your stack is empty.' : 'No CDs yet.';
+  document.querySelector('#empty-description').textContent = state.view === 'stack'
+    ? 'Add a CD to see its cover become the first case in your stack.'
+    : 'Add an album to start your library, then explore it in Grid or Stack view.';
   grid.hidden = state.cds.length === 0 || state.view !== 'grid';
   stackView.hidden = state.cds.length === 0 || state.view !== 'stack';
   document.querySelector('#grid-view').setAttribute('aria-pressed', state.view === 'grid');

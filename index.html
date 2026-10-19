@@ -36,7 +36,12 @@
         </div>
         <button id="stack-open" class="stack-open" type="button">View CD details</button>
       </section>
-      <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true">◎</div><h2>No CDs yet.</h2><p>Add an album to start your library, then explore it in Grid or Stack view.</p></div>
+      <div id="empty-state" class="empty-state">
+        <div class="empty-icon" aria-hidden="true">◎</div>
+        <div class="empty-stack" aria-hidden="true"><span></span><span></span><span></span></div>
+        <h2 id="empty-title">No CDs yet.</h2>
+        <p id="empty-description">Add an album to start your library, then explore it in Grid or Stack view.</p>
+      </div>
       <p class="storage-note">Saved CDs stay in this browser on this site. Libraries on other sites or devices are separate.</p>
     </main>
   </div>
