@@ -8,6 +8,8 @@ const status = document.querySelector('#search-status');
 const results = document.querySelector('#search-results');
 const grid = document.querySelector('#album-grid');
 const state = { cds: loadCds(), selected: null, mode: 'new', lastRequestAt: 0 };
+const requestCache = new Map();
+let requestQueue = Promise.resolve();
 
 function loadCds() {
   try {
@@ -102,13 +104,33 @@ function escapeLucene(value) {
   return value.replace(/[+&|!(){}\[\]^"~*?:\\/\-]/g, '\\$&');
 }
 
-async function musicBrainzGet(path) {
-  const elapsed = Date.now() - state.lastRequestAt;
-  if (elapsed < 1200) await new Promise(resolve => setTimeout(resolve, 1200 - elapsed));
-  state.lastRequestAt = Date.now();
-  const response = await fetch(MUSICBRAINZ + path, { headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error(response.status === 503 ? 'MusicBrainz is busy. Please wait a moment and try again.' : 'MusicBrainz could not load this album.');
-  return response.json();
+async function fetchMusicBrainz(path, onRetry) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const elapsed = Date.now() - state.lastRequestAt;
+    if (elapsed < 1200) await new Promise(resolve => setTimeout(resolve, 1200 - elapsed));
+    state.lastRequestAt = Date.now();
+    const response = await fetch(MUSICBRAINZ + path, { headers: { Accept: 'application/json' } });
+    if (response.ok) return response.json();
+    if (response.status !== 503 && response.status !== 429) {
+      throw new Error('MusicBrainz could not load this album.');
+    }
+    if (attempt === 2) throw new Error('MusicBrainz is still busy. Please try again in a moment.');
+    onRetry?.();
+    await new Promise(resolve => setTimeout(resolve, 2000 * (attempt + 1)));
+  }
+}
+
+async function musicBrainzGet(path, onRetry) {
+  if (requestCache.has(path)) return requestCache.get(path);
+  const pending = requestQueue.then(() => fetchMusicBrainz(path, onRetry));
+  requestQueue = pending.catch(() => {});
+  requestCache.set(path, pending);
+  try {
+    return await pending;
+  } catch (error) {
+    requestCache.delete(path);
+    throw error;
+  }
 }
 
 function renderResults(releases, inputArtist) {
@@ -150,7 +172,9 @@ async function selectRelease(release, inputArtist) {
   buttons.forEach(button => button.disabled = true);
   setStatus('Loading track list…');
   try {
-    const detail = await musicBrainzGet(`/release/${encodeURIComponent(release.id)}?inc=recordings+release-groups&fmt=json`);
+    const detail = await musicBrainzGet(`/release/${encodeURIComponent(release.id)}?inc=recordings+release-groups&fmt=json`, () => {
+      setStatus('MusicBrainz is busy. Retrying automatically…');
+    });
     const tracks = (detail.media || [])
       .filter(medium => (medium.format || '').toLowerCase().includes('cd'))
       .flatMap(medium => (medium.tracks || []).map(track => ({
@@ -232,7 +256,9 @@ searchForm.addEventListener('submit', async event => {
   setStatus('Searching MusicBrainz…');
   try {
     const query = `release:"${escapeLucene(album)}" AND artist:"${escapeLucene(artist)}" AND format:CD`;
-    const data = await musicBrainzGet(`/release/?query=${encodeURIComponent(query)}&fmt=json&limit=10`);
+    const data = await musicBrainzGet(`/release/?query=${encodeURIComponent(query)}&fmt=json&limit=10`, () => {
+      setStatus('MusicBrainz is busy. Retrying automatically…');
+    });
     renderResults(data.releases || [], artist);
   } catch (error) {
     setStatus(error.message, true);
