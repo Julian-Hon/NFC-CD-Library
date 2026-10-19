@@ -11,7 +11,7 @@ const grid = document.querySelector('#album-grid');
 const stackView = document.querySelector('#stack-view');
 const stack = document.querySelector('#cd-stack');
 const stackPeek = document.querySelector('#stack-peek');
-const state = { cds: loadCds(), selected: null, mode: 'new', view: loadView(), activeIndex: 0, lastRequestAt: 0 };
+const state = { cds: loadCds(), selected: null, mode: 'new', view: loadView(), activeIndex: 0, lastRequestAt: 0, transitioning: false };
 const requestCache = new Map();
 let requestQueue = Promise.resolve();
 let stackDrag = null;
@@ -121,6 +121,7 @@ function renderLibrary() {
 }
 
 function showStackPeek(cd, caseButton) {
+  if (state.transitioning) return;
   const position = state.cds.findIndex(item => item.id === cd.id) + 1;
   document.querySelector('#stack-peek-position').textContent = `CD ${position} of ${state.cds.length}`;
   document.querySelector('#stack-peek-album').textContent = cd.album;
@@ -135,7 +136,7 @@ function hideStackPeek() {
   stackPeek.hidden = true;
 }
 
-function renderStack() {
+function renderStack(preserveCase = null) {
   hideStackPeek();
   if (!state.cds.length) {
     stack.querySelectorAll('.stack-case').forEach(caseButton => caseButton.remove());
@@ -149,7 +150,7 @@ function renderStack() {
   }));
   const visibleIds = new Set(visible.map(({ cd }) => cd.id));
   for (const caseButton of stack.querySelectorAll('.stack-case')) {
-    if (!visibleIds.has(caseButton.dataset.id)) caseButton.remove();
+    if (!visibleIds.has(caseButton.dataset.id) && caseButton !== preserveCase) caseButton.remove();
   }
   const existing = new Map([...stack.querySelectorAll('.stack-case')].map(caseButton => [caseButton.dataset.id, caseButton]));
   for (const { cd, depth } of visible) {
@@ -180,12 +181,12 @@ function renderStack() {
     caseButton.classList.toggle('is-single', state.cds.length === 1);
     caseButton.style.zIndex = String(10 - depth);
     caseButton.onclick = () => {
-      if (suppressStackClick) return;
+      if (suppressStackClick || state.transitioning) return;
       if (depth === 0) showDetails(cd, 'saved');
       else {
-        state.activeIndex = state.cds.findIndex(item => item.id === cd.id);
-        renderStack();
-        stack.querySelector('[aria-current="true"]')?.focus({ preventScroll: true });
+        const nextIndex = state.cds.findIndex(item => item.id === cd.id);
+        const forward = (nextIndex - state.activeIndex + state.cds.length) % state.cds.length;
+        void transitionStackTo(nextIndex, forward <= state.cds.length / 2 ? 1 : -1);
       }
     };
   }
@@ -196,12 +197,76 @@ function renderStack() {
   document.querySelector('#stack-next').disabled = state.cds.length < 2;
 }
 
-function moveStack(step) {
-  if (state.cds.length < 2) return;
+async function transitionStackTo(nextIndex, direction) {
+  if (state.transitioning || nextIndex === state.activeIndex || state.cds.length < 2) return;
+  const oldTop = stack.querySelector('.stack-case[aria-current="true"]');
   const caseHadFocus = stack.contains(document.activeElement);
-  state.activeIndex = (state.activeIndex + step + state.cds.length) % state.cds.length;
-  renderStack();
-  if (caseHadFocus) stack.querySelector('[aria-current="true"]')?.focus({ preventScroll: true });
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  state.transitioning = true;
+  stackView.classList.add('is-traveling');
+  stackView.setAttribute('aria-busy', 'true');
+  hideStackPeek();
+  try {
+    if (!reducedMotion && oldTop) {
+      const stageRect = stack.getBoundingClientRect();
+      const caseRect = oldTop.getBoundingClientRect();
+      const currentTranslate = getComputedStyle(oldTop).translate;
+      const startX = currentTranslate === 'none' ? 0 : parseFloat(currentTranslate) || 0;
+      const exitDistance = direction > 0
+        ? stageRect.right - caseRect.left + 32
+        : stageRect.left - caseRect.right - 32;
+      const exit = oldTop.animate([
+        { translate: currentTranslate === 'none' ? '0px 0px' : currentTranslate },
+        { translate: `${startX + exitDistance}px -36px` }
+      ], { duration: 950, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' });
+      await exit.finished;
+      oldTop.classList.remove('is-dragging');
+      oldTop.style.removeProperty('--drag-x');
+      oldTop.blur();
+      state.activeIndex = nextIndex;
+      renderStack(oldTop);
+      const stillVisible = [...stack.querySelectorAll('.stack-case')]
+        .filter(caseButton => caseButton !== oldTop)
+        .length < Math.min(state.cds.length, 5);
+      if (!stillVisible) {
+        oldTop.dataset.depth = '4';
+        oldTop.style.zIndex = '1';
+        oldTop.setAttribute('aria-current', 'false');
+        oldTop.setAttribute('aria-hidden', 'true');
+        oldTop.tabIndex = -1;
+      }
+      oldTop.classList.add('is-repositioning');
+      exit.cancel();
+      const returnRect = oldTop.getBoundingClientRect();
+      const returnDistance = direction > 0
+        ? stageRect.right - returnRect.left + 32
+        : stageRect.left - returnRect.right - 32;
+      const returning = oldTop.animate([
+        { translate: `${returnDistance}px -36px` },
+        { translate: '0px 0px' }
+      ], { duration: 1000, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'both' });
+      await returning.finished;
+      returning.cancel();
+      oldTop.classList.remove('is-repositioning');
+      if (!stillVisible) oldTop.remove();
+    } else {
+      oldTop?.classList.remove('is-dragging');
+      oldTop?.style.removeProperty('--drag-x');
+      state.activeIndex = nextIndex;
+      renderStack();
+    }
+  } finally {
+    state.transitioning = false;
+    stackView.classList.remove('is-traveling');
+    stackView.removeAttribute('aria-busy');
+    if (caseHadFocus) stack.querySelector('.stack-case[aria-current="true"]')?.focus({ preventScroll: true });
+  }
+}
+
+function moveStack(step) {
+  if (state.cds.length < 2 || state.transitioning) return;
+  const nextIndex = (state.activeIndex + step + state.cds.length) % state.cds.length;
+  void transitionStackTo(nextIndex, step);
 }
 
 function setStatus(message, isError = false) {
@@ -371,10 +436,12 @@ document.querySelector('#grid-view').addEventListener('click', () => setView('gr
 document.querySelector('#stack-view-button').addEventListener('click', () => setView('stack'));
 document.querySelector('#stack-previous').addEventListener('click', () => moveStack(-1));
 document.querySelector('#stack-next').addEventListener('click', () => moveStack(1));
-document.querySelector('#stack-open').addEventListener('click', () => showDetails(state.cds[state.activeIndex], 'saved'));
+document.querySelector('#stack-open').addEventListener('click', () => {
+  if (!state.transitioning) showDetails(state.cds[state.activeIndex], 'saved');
+});
 stack.addEventListener('pointerdown', event => {
   const caseButton = event.target.closest('.stack-case[aria-current="true"]');
-  if (!caseButton || state.cds.length < 2 || event.button !== 0) return;
+  if (!caseButton || state.cds.length < 2 || state.transitioning || event.button !== 0) return;
   event.preventDefault();
   stackDrag = { button: caseButton, pointerId: event.pointerId, startX: event.clientX };
   caseButton.setPointerCapture(event.pointerId);
@@ -389,13 +456,14 @@ function endStackDrag(event) {
   if (!stackDrag || event.pointerId !== stackDrag.pointerId) return;
   const { button, startX } = stackDrag;
   const distance = event.clientX - startX;
-  button.classList.remove('is-dragging');
-  button.style.removeProperty('--drag-x');
   stackDrag = null;
   if (event.type !== 'pointercancel' && Math.abs(distance) > 45) {
     suppressStackClick = true;
     moveStack(distance > 0 ? 1 : -1);
     setTimeout(() => { suppressStackClick = false; }, 0);
+  } else {
+    button.classList.remove('is-dragging');
+    button.style.removeProperty('--drag-x');
   }
 }
 stack.addEventListener('pointerup', endStackDrag);

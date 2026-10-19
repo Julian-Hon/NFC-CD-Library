@@ -324,6 +324,9 @@ button:focus-visible, input:focus-visible, .album-card:focus-visible {
 .stack-case[data-depth="4"] { --case-x: -54px; --case-y: 60px; }
 .stack-case.is-single { --case-x: 0px; --case-y: 0px; }
 .stack-case.is-dragging { translate: 0 -15px; transition: none; cursor: grabbing; }
+.stack-case.is-repositioning { translate: 0 0; transition: none; pointer-events: none; }
+.stack-view.is-traveling .stack-arrow,
+.stack-view.is-traveling .stack-open { opacity: .55; cursor: wait; }
 .stack-art, .stack-art .album-cover { width: 100%; height: 100%; border-radius: 1px; }
 .stack-art .album-cover { border: 1px solid #77777799; filter: contrast(.98) saturate(.97); }
 .stack-art img { -webkit-user-drag: none; }
