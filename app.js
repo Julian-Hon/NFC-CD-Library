@@ -10,6 +10,7 @@ const results = document.querySelector('#search-results');
 const grid = document.querySelector('#album-grid');
 const stackView = document.querySelector('#stack-view');
 const stack = document.querySelector('#cd-stack');
+const stackPeek = document.querySelector('#stack-peek');
 const state = { cds: loadCds(), selected: null, mode: 'new', view: loadView(), activeIndex: 0, lastRequestAt: 0 };
 const requestCache = new Map();
 let requestQueue = Promise.resolve();
@@ -101,6 +102,7 @@ function renderLibrary() {
     renderStack();
     return;
   }
+  hideStackPeek();
   for (const cd of state.cds) {
     const card = document.createElement('button');
     card.className = 'album-card';
@@ -118,9 +120,25 @@ function renderLibrary() {
   }
 }
 
+function showStackPeek(cd, caseButton) {
+  const position = state.cds.findIndex(item => item.id === cd.id) + 1;
+  document.querySelector('#stack-peek-position').textContent = `CD ${position} of ${state.cds.length}`;
+  document.querySelector('#stack-peek-album').textContent = cd.album;
+  document.querySelector('#stack-peek-artist').textContent = cd.artist;
+  document.querySelector('#stack-peek-action').textContent = caseButton.dataset.depth === '0'
+    ? 'Drag to browse · Click for details'
+    : 'Click to bring forward';
+  stackPeek.hidden = false;
+}
+
+function hideStackPeek() {
+  stackPeek.hidden = true;
+}
+
 function renderStack() {
+  hideStackPeek();
   if (!state.cds.length) {
-    stack.replaceChildren();
+    stack.querySelectorAll('.stack-case').forEach(caseButton => caseButton.remove());
     return;
   }
   state.activeIndex = Math.min(state.activeIndex, state.cds.length - 1);
@@ -130,10 +148,10 @@ function renderStack() {
     cd: state.cds[(state.activeIndex + depth) % state.cds.length], depth
   }));
   const visibleIds = new Set(visible.map(({ cd }) => cd.id));
-  for (const caseButton of [...stack.children]) {
+  for (const caseButton of stack.querySelectorAll('.stack-case')) {
     if (!visibleIds.has(caseButton.dataset.id)) caseButton.remove();
   }
-  const existing = new Map([...stack.children].map(caseButton => [caseButton.dataset.id, caseButton]));
+  const existing = new Map([...stack.querySelectorAll('.stack-case')].map(caseButton => [caseButton.dataset.id, caseButton]));
   for (const { cd, depth } of visible) {
     let caseButton = existing.get(cd.id);
     if (!caseButton) {
@@ -148,6 +166,12 @@ function renderStack() {
       hinge.className = 'stack-hinge';
       hinge.setAttribute('aria-hidden', 'true');
       caseButton.append(art, hinge);
+      caseButton.addEventListener('mouseenter', () => showStackPeek(cd, caseButton));
+      caseButton.addEventListener('mouseleave', () => {
+        if (document.activeElement !== caseButton) hideStackPeek();
+      });
+      caseButton.addEventListener('focus', () => showStackPeek(cd, caseButton));
+      caseButton.addEventListener('blur', hideStackPeek);
       stack.append(caseButton);
     }
     caseButton.setAttribute('aria-label', `${depth === 0 ? 'Open' : 'Select'} ${cd.album} by ${cd.artist}`);

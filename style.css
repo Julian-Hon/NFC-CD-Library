@@ -234,6 +234,30 @@ button:focus-visible, input:focus-visible, .album-card:focus-visible {
   filter: blur(13px);
   transform: translateX(-50%);
 }
+.stack-peek {
+  position: absolute;
+  z-index: 20;
+  top: 38px;
+  left: clamp(12px, 3vw, 38px);
+  width: min(210px, 38%);
+  padding: 12px 14px;
+  border: 1px solid #ffffffdc;
+  border-radius: 10px;
+  background: #fffffff0;
+  box-shadow: 0 8px 24px #20242a24;
+  text-align: left;
+  pointer-events: none;
+  animation: peek-in .2s ease-out;
+}
+.stack-peek-position,
+.stack-peek strong,
+.stack-peek span,
+.stack-peek small { display: block; }
+.stack-peek-position { color: var(--accent); font-size: .68rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.stack-peek strong { margin-top: 5px; font-size: .95rem; line-height: 1.25; }
+.stack-peek > span:not(.stack-peek-position) { margin-top: 2px; color: var(--muted); font-size: .8rem; }
+.stack-peek small { margin-top: 8px; color: var(--accent); font-size: .7rem; font-weight: 700; }
+@keyframes peek-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 .stack-case {
   position: absolute;
   top: 47%;
@@ -245,8 +269,8 @@ button:focus-visible, input:focus-visible, .album-card:focus-visible {
   border-radius: 3px;
   background: linear-gradient(135deg, #ffffffa8 0%, #77777755 3%, #ffffffa6 6%, #eeeeee55 48%, #4b4b4b77 97%, #fdfdfdc9 100%);
   box-shadow: 17px 21px 21px #16161644, 1px 1px 1px #ffffff inset, -2px -2px 4px #48484899 inset;
-  transform: translate(-50%, -50%) translate(calc(var(--case-x) + var(--drag-x, 0px)), var(--case-y)) perspective(950px) rotateX(48deg) rotateZ(-10deg);
-  transition: transform .35s ease, box-shadow .35s ease;
+  transform: translate(-50%, -50%) translate(calc(var(--case-x) + var(--drag-x, 0px) + var(--hover-x, 0px)), calc(var(--case-y) + var(--hover-y, 0px))) perspective(950px) rotateX(48deg) rotateZ(calc(-10deg + var(--hover-rotate, 0deg)));
+  transition: transform .35s cubic-bezier(.2,.7,.2,1), box-shadow .35s ease;
   touch-action: pan-y;
   user-select: none;
   cursor: pointer;
@@ -275,16 +299,32 @@ button:focus-visible, input:focus-visible, .album-card:focus-visible {
   border-bottom: 2px solid #33333394;
   border-radius: 2px;
   background: linear-gradient(126deg, #ffffff93 0%, #ffffff27 13%, #ffffff00 26%, #ffffff00 39%, #ffffffba 40%, #ffffff9c 44%, #ffffff10 50%, #ffffff00 55%, #ffffff00 68%, #ffffff75 71%, #ffffff00 78%), linear-gradient(21deg, #19191935 0%, #ffffff00 23%, #ffffff00 77%, #ffffff43 100%);
+  background-size: 165% 165%, 100% 100%;
+  background-position: 0% 0%, center;
   box-shadow: 0 0 0 1px #ffffff60 inset, 0 0 6px #ffffffa8 inset;
   pointer-events: none;
+  transition: background-position .55s ease;
 }
+.stack-case:hover:not(.is-dragging), .stack-case:focus-visible {
+  --hover-x: -18px;
+  --hover-y: -9px;
+  --hover-rotate: -2deg;
+  box-shadow: 20px 26px 30px #11111159, 1px 1px 1px #ffffff inset, -2px -2px 4px #48484899 inset;
+}
+.stack-case:hover::after, .stack-case:focus-visible::after { background-position: 100% 35%, center; }
 .stack-case[data-depth="0"] { --case-x: 121px; --case-y: -47px; box-shadow: 22px 29px 28px #11111161, 1px 1px 1px #ffffff inset, -2px -2px 4px #48484899 inset; cursor: grab; }
+.stack-case[data-depth="0"]:hover:not(.is-dragging), .stack-case[data-depth="0"]:focus-visible {
+  --hover-x: 3px;
+  --hover-y: -15px;
+  --hover-rotate: 2deg;
+  box-shadow: 28px 36px 32px #11111170, 1px 1px 1px #ffffff inset, -2px -2px 4px #48484899 inset;
+}
 .stack-case[data-depth="1"] { --case-x: -15px; --case-y: 2px; }
 .stack-case[data-depth="2"] { --case-x: -27px; --case-y: 21px; }
 .stack-case[data-depth="3"] { --case-x: -41px; --case-y: 41px; }
 .stack-case[data-depth="4"] { --case-x: -54px; --case-y: 60px; }
 .stack-case.is-single { --case-x: 0px; --case-y: 0px; }
-.stack-case.is-dragging { transition: none; cursor: grabbing; }
+.stack-case.is-dragging { --hover-y: -15px; transition: none; cursor: grabbing; }
 .stack-art, .stack-art .album-cover { width: 100%; height: 100%; border-radius: 1px; }
 .stack-art .album-cover { border: 1px solid #77777799; filter: contrast(.98) saturate(.97); }
 .stack-art img { -webkit-user-drag: none; }
@@ -311,7 +351,8 @@ button:focus-visible, input:focus-visible, .album-card:focus-visible {
 .stack-open:hover { background: var(--tint); }
 
 @media (prefers-reduced-motion: reduce) {
-  .stack-case { transition: none; }
+  .stack-case, .stack-case::after { transition: none; }
+  .stack-peek { animation: none; }
 }
 
 dialog {
@@ -426,6 +467,7 @@ dialog::backdrop { background: #182037a6; }
   .album-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .stack-view { padding: 20px 10px 26px; }
   .cd-stack { height: 350px; }
+  .stack-peek { top: 0; left: 8px; width: min(170px, 50%); padding: 9px 10px; }
   .stack-case { width: min(56vw, 230px); }
   .stack-case[data-depth="0"] { --case-x: 25px; --case-y: -35px; }
   .stack-case.is-single { --case-x: 0px; --case-y: 0px; }

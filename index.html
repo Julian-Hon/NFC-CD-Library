@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f7f5">
   <meta name="description" content="Digital CD Library — catalog your physical CD collection.">
   <title>Digital CD Library</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
   <div class="page">
@@ -28,7 +28,14 @@
       <div id="album-grid" class="album-grid" aria-live="polite"></div>
       <section id="stack-view" class="stack-view" aria-label="CD stack" hidden>
         <p class="stack-hint">Slide the top case aside to sift through your CDs.</p>
-        <div id="cd-stack" class="cd-stack"></div>
+        <div id="cd-stack" class="cd-stack">
+          <div id="stack-peek" class="stack-peek" aria-hidden="true" hidden>
+            <span id="stack-peek-position" class="stack-peek-position"></span>
+            <strong id="stack-peek-album"></strong>
+            <span id="stack-peek-artist"></span>
+            <small id="stack-peek-action"></small>
+          </div>
+        </div>
         <div class="stack-navigation">
           <button id="stack-previous" class="stack-arrow" type="button" aria-label="Previous CD">←</button>
           <div class="stack-current"><span id="stack-position" class="stack-position"></span><h2 id="stack-album"></h2><p id="stack-artist"></p></div>
@@ -65,6 +72,6 @@
     </div>
     <p class="data-credit">Album data from <a href="https://musicbrainz.org/" target="_blank" rel="noopener noreferrer">MusicBrainz</a> · Covers from <a href="https://coverartarchive.org/" target="_blank" rel="noopener noreferrer">Cover Art Archive</a></p>
   </dialog>
-  <script src="app.js?v=2" defer></script>
+  <script src="app.js?v=3" defer></script>
 </body>
 </html>
