@@ -10,7 +10,7 @@ Select **Add CD**, enter an album and artist, choose the matching CD edition, re
 
 The library currently uses browser local storage. It stays on the same browser and origin, with no account or sync yet. NFC integration is a future step.
 
-Once you have saved CDs, switch between **Grid** and **Stack** views. In Stack view, select a neighboring jewel case to bring it forward, then select the front case to open its details. The arrow buttons and left/right arrow keys also move through the stack.
+Once you have saved CDs, switch between **Grid** and **Stack** views. Stack view shows your albums as a pile of clear jewel cases. Drag the top case left or right, select a case underneath, or use the arrow buttons and left/right arrow keys to browse. Select the top case or **View CD details** to open it.
 
 ## Setup
 

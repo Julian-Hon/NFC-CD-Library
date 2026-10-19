@@ -12,6 +12,8 @@ const stack = document.querySelector('#cd-stack');
 const state = { cds: loadCds(), selected: null, mode: 'new', view: 'grid', activeIndex: 0, lastRequestAt: 0 };
 const requestCache = new Map();
 let requestQueue = Promise.resolve();
+let stackDrag = null;
+let suppressStackClick = false;
 
 function loadCds() {
   try {
@@ -52,6 +54,7 @@ function cover(container, releaseId, releaseGroupId) {
   const image = new Image();
   image.className = 'album-cover';
   image.alt = '';
+  image.draggable = false;
   let index = 0;
   image.onload = () => container.replaceChildren(image);
   image.onerror = () => {
@@ -103,16 +106,16 @@ function renderStack() {
   }
   state.activeIndex = Math.min(state.activeIndex, state.cds.length - 1);
   const active = state.cds[state.activeIndex];
-  const first = Math.max(0, state.activeIndex - 3);
-  const last = Math.min(state.cds.length - 1, state.activeIndex + 3);
-  const visibleIds = new Set(state.cds.slice(first, last + 1).map(cd => cd.id));
+  const visibleCount = Math.min(state.cds.length, 5);
+  const visible = Array.from({ length: visibleCount }, (_, depth) => ({
+    cd: state.cds[(state.activeIndex + depth) % state.cds.length], depth
+  }));
+  const visibleIds = new Set(visible.map(({ cd }) => cd.id));
   for (const caseButton of [...stack.children]) {
     if (!visibleIds.has(caseButton.dataset.id)) caseButton.remove();
   }
   const existing = new Map([...stack.children].map(caseButton => [caseButton.dataset.id, caseButton]));
-  for (let index = first; index <= last; index++) {
-    const cd = state.cds[index];
-    const offset = index - state.activeIndex;
+  for (const { cd, depth } of visible) {
     let caseButton = existing.get(cd.id);
     if (!caseButton) {
       caseButton = document.createElement('button');
@@ -122,18 +125,22 @@ function renderStack() {
       const art = document.createElement('div');
       art.className = 'stack-art';
       cover(art, cd.id, cd.releaseGroupId);
-      caseButton.append(art);
+      const hinge = document.createElement('span');
+      hinge.className = 'stack-hinge';
+      hinge.setAttribute('aria-hidden', 'true');
+      caseButton.append(art, hinge);
       stack.append(caseButton);
     }
-    caseButton.setAttribute('aria-label', `${offset === 0 ? 'Open' : 'Select'} ${cd.album} by ${cd.artist}`);
-    caseButton.setAttribute('aria-current', offset === 0 ? 'true' : 'false');
-    caseButton.style.setProperty('--offset', offset);
-    caseButton.style.setProperty('--distance', Math.abs(offset));
-    caseButton.style.zIndex = String(10 - Math.abs(offset));
+    caseButton.setAttribute('aria-label', `${depth === 0 ? 'Open' : 'Select'} ${cd.album} by ${cd.artist}`);
+    caseButton.setAttribute('aria-current', depth === 0 ? 'true' : 'false');
+    caseButton.dataset.depth = String(depth);
+    caseButton.classList.toggle('is-single', state.cds.length === 1);
+    caseButton.style.zIndex = String(10 - depth);
     caseButton.onclick = () => {
-      if (index === state.activeIndex) showDetails(cd, 'saved');
+      if (suppressStackClick) return;
+      if (depth === 0) showDetails(cd, 'saved');
       else {
-        state.activeIndex = index;
+        state.activeIndex = state.cds.findIndex(item => item.id === cd.id);
         renderStack();
         stack.querySelector('[aria-current="true"]')?.focus({ preventScroll: true });
       }
@@ -142,15 +149,14 @@ function renderStack() {
   document.querySelector('#stack-position').textContent = `${state.activeIndex + 1} / ${state.cds.length}`;
   document.querySelector('#stack-album').textContent = active.album;
   document.querySelector('#stack-artist').textContent = active.artist;
-  document.querySelector('#stack-previous').disabled = state.activeIndex === 0;
-  document.querySelector('#stack-next').disabled = state.activeIndex === state.cds.length - 1;
+  document.querySelector('#stack-previous').disabled = state.cds.length < 2;
+  document.querySelector('#stack-next').disabled = state.cds.length < 2;
 }
 
 function moveStack(step) {
-  const next = state.activeIndex + step;
-  if (next < 0 || next >= state.cds.length) return;
+  if (state.cds.length < 2) return;
   const caseHadFocus = stack.contains(document.activeElement);
-  state.activeIndex = next;
+  state.activeIndex = (state.activeIndex + step + state.cds.length) % state.cds.length;
   renderStack();
   if (caseHadFocus) stack.querySelector('[aria-current="true"]')?.focus({ preventScroll: true });
 }
@@ -329,6 +335,34 @@ document.querySelector('#stack-view-button').addEventListener('click', () => {
 document.querySelector('#stack-previous').addEventListener('click', () => moveStack(-1));
 document.querySelector('#stack-next').addEventListener('click', () => moveStack(1));
 document.querySelector('#stack-open').addEventListener('click', () => showDetails(state.cds[state.activeIndex], 'saved'));
+stack.addEventListener('pointerdown', event => {
+  const caseButton = event.target.closest('.stack-case[aria-current="true"]');
+  if (!caseButton || state.cds.length < 2 || event.button !== 0) return;
+  event.preventDefault();
+  stackDrag = { button: caseButton, pointerId: event.pointerId, startX: event.clientX };
+  caseButton.setPointerCapture(event.pointerId);
+  caseButton.classList.add('is-dragging');
+});
+stack.addEventListener('pointermove', event => {
+  if (!stackDrag || event.pointerId !== stackDrag.pointerId) return;
+  const distance = event.clientX - stackDrag.startX;
+  stackDrag.button.style.setProperty('--drag-x', `${distance}px`);
+});
+function endStackDrag(event) {
+  if (!stackDrag || event.pointerId !== stackDrag.pointerId) return;
+  const { button, startX } = stackDrag;
+  const distance = event.clientX - startX;
+  button.classList.remove('is-dragging');
+  button.style.removeProperty('--drag-x');
+  stackDrag = null;
+  if (event.type !== 'pointercancel' && Math.abs(distance) > 45) {
+    suppressStackClick = true;
+    moveStack(distance > 0 ? 1 : -1);
+    setTimeout(() => { suppressStackClick = false; }, 0);
+  }
+}
+stack.addEventListener('pointerup', endStackDrag);
+stack.addEventListener('pointercancel', endStackDrag);
 stackView.addEventListener('keydown', event => {
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
     event.preventDefault();
