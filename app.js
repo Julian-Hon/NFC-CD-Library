@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'digital-cd-library:cds:v1';
+const VIEW_KEY = 'digital-cd-library:view:v1';
 const MUSICBRAINZ = 'https://musicbrainz.org/ws/2';
 const COVER_ART = 'https://coverartarchive.org';
 
@@ -9,7 +10,7 @@ const results = document.querySelector('#search-results');
 const grid = document.querySelector('#album-grid');
 const stackView = document.querySelector('#stack-view');
 const stack = document.querySelector('#cd-stack');
-const state = { cds: loadCds(), selected: null, mode: 'new', view: 'grid', activeIndex: 0, lastRequestAt: 0 };
+const state = { cds: loadCds(), selected: null, mode: 'new', view: loadView(), activeIndex: 0, lastRequestAt: 0 };
 const requestCache = new Map();
 let requestQueue = Promise.resolve();
 let stackDrag = null;
@@ -22,6 +23,24 @@ function loadCds() {
   } catch {
     return [];
   }
+}
+
+function loadView() {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'stack' ? 'stack' : 'grid';
+  } catch {
+    return 'grid';
+  }
+}
+
+function setView(view) {
+  state.view = view;
+  try {
+    localStorage.setItem(VIEW_KEY, view);
+  } catch {
+    // Browsing still works when storage is unavailable.
+  }
+  renderLibrary();
 }
 
 function saveCds() {
@@ -324,14 +343,8 @@ function showDetails(cd, mode) {
 }
 
 document.querySelector('#add-cd').addEventListener('click', openAdd);
-document.querySelector('#grid-view').addEventListener('click', () => {
-  state.view = 'grid';
-  renderLibrary();
-});
-document.querySelector('#stack-view-button').addEventListener('click', () => {
-  state.view = 'stack';
-  renderLibrary();
-});
+document.querySelector('#grid-view').addEventListener('click', () => setView('grid'));
+document.querySelector('#stack-view-button').addEventListener('click', () => setView('stack'));
 document.querySelector('#stack-previous').addEventListener('click', () => moveStack(-1));
 document.querySelector('#stack-next').addEventListener('click', () => moveStack(1));
 document.querySelector('#stack-open').addEventListener('click', () => showDetails(state.cds[state.activeIndex], 'saved'));
