@@ -64,7 +64,6 @@ function cover(container, releaseId, releaseGroupId) {
 function renderLibrary() {
   document.querySelector('#cd-count').textContent = `${state.cds.length} ${state.cds.length === 1 ? 'CD' : 'CDs'}`;
   document.querySelector('#empty-state').hidden = state.cds.length > 0;
-  document.querySelector('#view-switch').hidden = state.cds.length === 0;
   grid.hidden = state.cds.length === 0 || state.view !== 'grid';
   stackView.hidden = state.cds.length === 0 || state.view !== 'stack';
   document.querySelector('#grid-view').setAttribute('aria-pressed', state.view === 'grid');
