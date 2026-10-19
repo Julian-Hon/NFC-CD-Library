@@ -15,9 +15,35 @@
     </header>
 
     <main class="library" aria-labelledby="library-title">
-      <div class="section-heading"><h1 id="library-title">My library<span class="period">.</span></h1><span class="count">0 CDs</span></div>
-      <div class="empty-state"><div class="empty-icon" aria-hidden="true">◎</div><h2>No CDs yet.</h2></div>
+      <div class="section-heading">
+        <div><h1 id="library-title">My library<span class="period">.</span></h1><span id="cd-count" class="count">0 CDs</span></div>
+        <button id="add-cd" class="primary-button" type="button">+ Add CD</button>
+      </div>
+      <div id="album-grid" class="album-grid" aria-live="polite"></div>
+      <div id="empty-state" class="empty-state"><div class="empty-icon" aria-hidden="true">◎</div><h2>No CDs yet.</h2><p>Add an album to start your library.</p></div>
+      <p class="storage-note">Your library is saved in this browser.</p>
     </main>
   </div>
+
+  <dialog id="cd-dialog" aria-labelledby="dialog-title">
+    <div class="dialog-heading"><h2 id="dialog-title">Add a CD</h2><button id="close-dialog" class="close-button" type="button" aria-label="Close">×</button></div>
+    <div id="search-stage">
+      <form id="search-form">
+        <label>Album name<input id="album-name" type="text" autocomplete="off" maxlength="160" required placeholder="e.g. In Rainbows"></label>
+        <label>Artist name<input id="artist-name" type="text" autocomplete="off" maxlength="160" required placeholder="e.g. Radiohead"></label>
+        <button id="search-button" class="primary-button" type="submit">Find CD editions</button>
+      </form>
+      <p id="search-status" class="status" role="status" aria-live="polite"></p>
+      <div id="search-results" class="search-results"></div>
+    </div>
+    <div id="detail-stage" hidden>
+      <button id="back-to-results" class="back-button" type="button">← Back to results</button>
+      <div class="release-detail"><div id="detail-cover" class="detail-cover"></div><div><h3 id="detail-album"></h3><p id="detail-artist"></p><p id="detail-edition" class="edition"></p></div></div>
+      <h4>Track list</h4><ol id="track-list" class="track-list"></ol>
+      <div class="detail-actions"><button id="save-cd" class="primary-button" type="button">Save to library</button><button id="remove-cd" class="remove-button" type="button" hidden>Remove CD</button></div>
+    </div>
+    <p class="data-credit">Album data from <a href="https://musicbrainz.org/" target="_blank" rel="noopener noreferrer">MusicBrainz</a> · Covers from <a href="https://coverartarchive.org/" target="_blank" rel="noopener noreferrer">Cover Art Archive</a></p>
+  </dialog>
+  <script src="app.js" defer></script>
 </body>
 </html>

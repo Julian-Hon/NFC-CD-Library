@@ -1,10 +1,14 @@
-# ESP32 Music Display
+# Digital CD Library and ESP32 Music Display
 
 An ESP32 sketch that shows the latest track from Last.fm on a TFT display, including album art.
 
 ## Digital CD Library webpage
 
-The first, static version of the companion website is at the repository root. Open [`index.html`](index.html) in a browser to view it. Album storage, accounts, and NFC integration are future steps.
+The companion website is at the repository root. Serve this folder locally (for example, `python -m http.server 8000`) and open `http://localhost:8000/`.
+
+Select **Add CD**, enter an album and artist, choose the matching CD edition, review its cover and track list, then save it. Search and track data come from [MusicBrainz](https://musicbrainz.org/); cover images come from the [Cover Art Archive](https://coverartarchive.org/). MusicBrainz requests are spaced apart to respect its rate limit. A missing cover displays a placeholder.
+
+The library currently uses browser local storage. It stays on the same browser and origin, with no account or sync yet. NFC integration is a future step.
 
 ## Setup
 
