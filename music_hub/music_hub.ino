@@ -614,9 +614,16 @@ void cloudExchange() {
     return;
   }
   JsonDocument result;
-  DeserializationError error = deserializeJson(result, http.getStream());
+  // HTTPClient decodes chunked transfer encoding in getString(). Its raw
+  // stream can include chunk markers, which are not valid JSON.
+  String responseBody = http.getString();
   http.end();
-  if (error) { Serial.println("Account reply invalid"); return; }
+  DeserializationError error = deserializeJson(result, responseBody);
+  if (error) {
+    Serial.printf("Account reply invalid: %s (%u bytes)\n", error.c_str(),
+                  static_cast<unsigned>(responseBody.length()));
+    return;
+  }
   String ack = result["ack"] | "";
   if (cloudEventId.isEmpty() || ack != cloudEventId || !result["resolved"].as<bool>() ||
       cloudUid != shownUid || mode != Mode::Library) return;
