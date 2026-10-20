@@ -229,7 +229,12 @@ def read_serial(port):
                     if cloud_result:
                         uid = cloud_result['uid']
                         if cloud_result['cd']:
-                            save_cd(cloud_result['cd'], uid, True)
+                            cd = cloud_result['cd']
+                            # Direct lookup returns a small screen summary;
+                            # the old USB path still needs a local track count.
+                            if 'tracks' not in cd:
+                                cd = {**cd, 'tracks': [None] * min(int(cd.get('trackCount', 0)), 200)}
+                            save_cd(cd, uid, True)
                         else:
                             with database() as connection:
                                 connection.execute('DELETE FROM tag_links WHERE uid = ?', (uid,))

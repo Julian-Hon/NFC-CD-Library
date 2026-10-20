@@ -119,10 +119,10 @@
   </dialog>
   <dialog id="readers-dialog" aria-labelledby="readers-title">
     <div class="dialog-heading"><h2 id="readers-title">My readers</h2><button id="readers-close" class="close-button" aria-label="Close readers">×</button></div>
-    <p>Link your USB reader to this account to scan CDs on the live website. Keep the bridge running on the computer connected to your ESP32.</p>
+    <p>Link your ESP32 reader to this account. It can use a USB bridge or connect directly over Wi-Fi after provisioning.</p>
     <div id="readers-list"></div>
     <form id="reader-pair-form"><label>Reader name<input id="reader-name" value="My ESP32" maxlength="80" required></label><button class="primary-button" id="reader-create">Pair a reader</button></form>
-    <div id="reader-credential-panel" hidden><p>Copy this credential now. It will not be shown again. Keep it private.</p><textarea id="reader-credential" readonly aria-label="Reader credential"></textarea><p>On the computer connected to the ESP32, stop the old bridge and run:</p><pre>python local_bridge.py --serial COM3 --pair --cloud</pre><p>Paste the credential at the hidden prompt. For later starts, use <code>python local_bridge.py --serial COM3 --cloud</code>.</p></div>
+    <div id="reader-credential-panel" hidden><p>Copy this credential now. It will not be shown again. Keep it private.</p><textarea id="reader-credential" readonly aria-label="Reader credential"></textarea><p>For the USB bridge, run on the connected computer:</p><pre>python local_bridge.py --serial COM3 --pair --cloud</pre><p>For direct Wi-Fi, upload the latest Music Hub firmware, then provision the ESP32 over USB using <code>python tools/provision_esp32_reader.py --port COM3</code>. See the README for the setup sequence.</p></div>
     <p id="readers-status" role="status"></p>
   </dialog>
   <script src="supabase-config.js" defer></script>

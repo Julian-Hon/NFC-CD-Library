@@ -2,15 +2,28 @@
 
 The `music_hub` firmware combines the Last.fm music display and NFC CD library on one ESP32. Choose a mode on its touch screen without uploading another sketch.
 
+## Standalone CD scans over Wi-Fi
+
+The CD reader can now work without a computer after one-time provisioning. It needs USB power (a wall adapter or power bank), Wi-Fi, and the existing Supabase account pairing. The PN532 still connects to the ESP32 by SPI. Each scan goes from the ESP32 to the account's restricted reader endpoint over verified HTTPS. The endpoint checks the scanned UID against that account's CDs and returns a small album summary; the ESP32 downloads a 160 × 160 cover image for its case display. The website can be closed. When it is open, the scan also selects the album there.
+
+1. In Supabase SQL Editor, run [reader-direct.sql](supabase/reader-direct.sql) after the earlier `reader-pairing.sql`. This upgrades the paired reader lookup; it does not alter CDs or tag links.
+2. Make sure `music_hub/secrets.h` has your working Wi-Fi settings (it is ignored by Git). In Arduino IDE upload the updated `music_hub/music_hub.ino`. The public Supabase URL and publishable key are in `music_hub/cloud_config.h`; your reader credential is never stored in source code.
+3. Stop `local_bridge.py` and close Arduino Serial Monitor so COM3 is free. With the board connected by USB, run `python tools/provision_esp32_reader.py --port COM3`. It reads the already paired credential from ignored `local_data/reader-credential.json` and stores it in the ESP32's Preferences flash without printing it. You do not need to re-pair on the website. If your credential file is gone, create a reader under **Account → My readers**, pair the bridge once using `--pair`, stop it, then provision the board.
+4. Unplug the ESP32 from the computer, power it from a USB wall adapter, select **CD Library**, and scan a linked tag. The case and cover should appear. The live website will also select the album when signed in and open. An unknown tag shows **New sticker** on the ESP32; open the website to add/link it, then the screen updates after the account link is saved.
+
+The ESP32 uses the same revocable reader credential as the USB bridge. Stop the bridge before provisioning or using direct mode; running both with one reader identity would make the online status and latest scan ambiguous. The credential survives normal firmware uploads, but erasing flash removes it. Revoke the reader in **My readers** if the device is lost. The credential is saved in device flash and can be extracted by someone with physical access to an unprotected ESP32, so treat the device as an account key. Direct mode needs a working clock from NTP to validate TLS certificates. It never sends the reader credential over an unverified TLS connection. The image proxy is used only for public album cover art; it does not receive the reader credential.
+
+To return to USB bridge mode on a still-paired board, send `UNPAIR` over Arduino Serial Monitor at 115200 baud (newline line ending). This removes the credential from Preferences and the next scan uses the original USB protocol. It does not revoke the reader in Supabase.
+
 ## Combined firmware for the ESP32-2432S028R
 
 1. Copy `music_hub/secrets.h.example` to `music_hub/secrets.h` and enter your Wi-Fi name and password, Last.fm username, and Last.fm API key. Git ignores `secrets.h`.
 2. Install the ESP32 Arduino core and the ArduinoJson, TFT_eSPI, TJpg_Decoder, Adafruit PN532, Adafruit BusIO, and **XPT2046_Bitbang_Slim** libraries. Configure TFT_eSPI for this display on HSPI (`USE_HSPI_PORT`). Keep the PN532 on the SPI connector with the wiring in [Test the NFC reader](#test-the-nfc-reader).
 3. Open `music_hub/music_hub.ino` in Arduino IDE, select the ESP32 board and its port, and upload.
 4. On first boot, tap the three touch targets in order, lifting your finger between taps. Calibration is saved on the ESP32. Use **Calibrate touch** on the home screen if you need to repeat it.
-5. Tap **Listening** to see the current or most recently observed Last.fm track. Tap **HOME**, then **CD Library** to scan stickers. Keep the USB bridge running for CD lookups and cover art. The browser at `http://127.0.0.1:8317/` still handles first-time CD entry.
+5. Tap **Listening** to see the current or most recently observed Last.fm track. Tap **HOME**, then **CD Library** to scan stickers. A provisioned board looks up CDs directly over Wi-Fi. An unpaired board uses the USB bridge described below.
 
-The older `music_display` and `nfc_library` sketches remain available as independent diagnostics. The combined firmware needs Wi-Fi only in Listening mode; CD scans still travel over USB to the local bridge. If the PN532 is unavailable, the home screen and Listening mode can still run.
+The older `music_display` and `nfc_library` sketches remain available as independent diagnostics. Direct CD mode and Listening mode both need Wi-Fi; unpaired USB CD mode can run without it. If the PN532 is unavailable, the home screen and Listening mode can still run.
 
 ## Supabase account sign-in
 
@@ -70,7 +83,7 @@ If it prints `PN532 not found`, unplug USB before adjusting wires, then check th
 4. Keep the live website open and signed in. A scan travels from ESP32 → USB bridge → Supabase → your account's website. The website resolves the tag using its existing account-scoped library, selects the album, and sends its display data back to the same reader. New tags open the existing Add CD workflow; saving the CD also updates the waiting reader.
 5. Subsequent starts use `python local_bridge.py --serial COM3 --cloud`. Use **My readers → Revoke** to disable a credential immediately, then pair again if needed.
 
-This first cloud relay still requires the USB computer and an open signed-in website for album resolution. It does not implement direct ESP32 Wi-Fi or autonomous offline account access. The website stays on GitHub Pages and never needs permission to reach localhost. Scans/heartbeats poll roughly every 2–2.5 seconds; the indicator becomes offline after 15 seconds without a heartbeat. Only the latest scan per reader is retained. Scans older than 30 seconds are not replayed into the UI when the page opens. Internet failures retain the latest pending scan in the running bridge for retry; process restarts do not replay it.
+The USB relay is still useful as a fallback and for diagnostics. After applying `reader-direct.sql`, its paired reader also resolves CDs without an open website; the direct firmware above removes the need for the USB computer. The website stays on GitHub Pages and never needs permission to reach localhost. The indicator becomes offline after 15 seconds without a heartbeat. Only the latest scan per reader is retained. Scans older than 30 seconds are not replayed into the UI when the page opens. Internet failures retain the latest pending scan in the running bridge for retry; process restarts do not replay it.
 
 The database stores only a SHA-256 hash of a random 256-bit reader credential. The credential permits only this reader's heartbeat, scan submission, and display response retrieval, not account sign-in or library browsing. Owners can read and revoke only their own reader records. Protect the local credential file like a password. Security approach follows [Supabase's function permissions guidance](https://supabase.com/docs/guides/database/functions).
 

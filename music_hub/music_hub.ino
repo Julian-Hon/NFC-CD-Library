@@ -9,7 +9,10 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <LittleFS.h>
+#include <time.h>
+#include <esp_system.h>
 #include "secrets.h"
+#include "cloud_config.h"
 
 // These pins are printed beside the SPI connector on this ESP32 display.
 constexpr uint8_t NFC_SCK = 18;
@@ -47,6 +50,14 @@ unsigned long lastTouchPoll = 0;
 bool nfcReady = false;
 bool filesystemReady = false;
 unsigned long lastNfcPoll = 0;
+unsigned long lastTagSeenAt = 0;
+unsigned long lastCloudPoll = 0;
+bool ntpStarted = false;
+String cloudReaderId;
+String cloudReaderToken;
+String cloudEventId;
+String cloudUid;
+String lastReportedUid;
 
 struct TrackInfo {
   String song;
@@ -66,6 +77,8 @@ unsigned long lastWiFiAttempt = 0;
 void drawListeningScreen(const TrackInfo &track);
 void getCurrentSong();
 void enterMode(Mode next);
+void connectWiFi();
+void cloudExchange();
 
 String serialLine;
 String shownUid;
@@ -221,7 +234,86 @@ void receiveCover(const String &line) {
   free(jpeg);
 }
 
+bool cloudConfigured() {
+  return cloudReaderId.length() == 36 && cloudReaderToken.length() == 64;
+}
+
+bool validReaderCredential(const String &id, const String &token) {
+  if (id.length() != 36 || token.length() != 64) return false;
+  for (int i = 0; i < 36; ++i) {
+    if (i == 8 || i == 13 || i == 18 || i == 23) {
+      if (id[i] != '-') return false;
+    } else if (!isxdigit(static_cast<unsigned char>(id[i]))) return false;
+  }
+  for (int i = 0; i < 64; ++i) {
+    if (!isxdigit(static_cast<unsigned char>(token[i]))) return false;
+  }
+  return true;
+}
+
+String newScanId() {
+  uint8_t bytes[16];
+  for (int i = 0; i < 16; i += 4) {
+    uint32_t randomValue = esp_random();
+    memcpy(bytes + i, &randomValue, 4);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  char id[37];
+  snprintf(id, sizeof(id), "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+           bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+           bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
+  return String(id);
+}
+
+void saveReaderCredential(const String &id, const String &token) {
+  preferences.begin("cd-cloud", false);
+  preferences.putString("id", id);
+  preferences.putString("token", token);
+  preferences.end();
+  cloudReaderId = id;
+  cloudReaderToken = token;
+  cloudEventId = "";
+  cloudUid = "";
+  lastReportedUid = "";
+}
+
+void readReaderCredential() {
+  preferences.begin("cd-cloud", true);
+  cloudReaderId = preferences.getString("id", "");
+  cloudReaderToken = preferences.getString("token", "");
+  preferences.end();
+  if (!validReaderCredential(cloudReaderId, cloudReaderToken)) {
+    cloudReaderId = "";
+    cloudReaderToken = "";
+  }
+}
+
 void handleBridgeLine(const String &line) {
+  if (line.startsWith("PAIR ")) {
+    String value = line.substring(5);
+    int separator = value.indexOf(':');
+    if (separator > 0 && validReaderCredential(value.substring(0, separator), value.substring(separator + 1))) {
+      saveReaderCredential(value.substring(0, separator), value.substring(separator + 1));
+      Serial.println("Reader paired for direct Wi-Fi scans");
+      if (mode == Mode::Library) {
+        connectWiFi();
+        drawMessage("DIGITAL CD LIBRARY", "Reader paired", "Connecting to Wi-Fi...");
+      }
+    } else Serial.println("Reader credential invalid");
+    return;
+  }
+  if (line == "UNPAIR") {
+    preferences.begin("cd-cloud", false);
+    preferences.clear();
+    preferences.end();
+    cloudReaderId = "";
+    cloudReaderToken = "";
+    cloudEventId = "";
+    Serial.println("Direct reader unpaired; USB bridge mode restored");
+    return;
+  }
+  if (cloudConfigured()) return; // Never accept an old USB bridge response in direct mode.
   if (line.startsWith("NFC_COVER ")) {
     receiveCover(line);
     return;
@@ -408,20 +500,143 @@ void enterMode(Mode next) {
   } else if (mode == Mode::Library) {
     shownUid = "";
     shownSummary = "";
-    if (nfcReady) drawMessage("DIGITAL CD LIBRARY", "Ready to scan a CD", "Keep the USB bridge running");
+    if (nfcReady && cloudConfigured()) {
+      connectWiFi();
+      drawMessage("DIGITAL CD LIBRARY", "Ready to scan a CD", "Connecting to your account...");
+    } else if (nfcReady) drawMessage("DIGITAL CD LIBRARY", "Ready to scan a CD", "Keep the USB bridge running");
     else drawMessage("NFC READER ERROR", "Check PN532 wiring", "and its SPI mode switches");
-    Serial.println("NFC_MODE_READY");
+    if (!cloudConfigured()) Serial.println("NFC_MODE_READY");
   } else {
     if (hasDisplayedTrack) drawListeningScreen(displayedTrack);
     else drawMessage("LISTENING", "Connecting to Last.fm...", "");
-    if (WiFi.status() != WL_CONNECTED) {
-      WiFi.mode(WIFI_STA);
-      if (WIFI_PASSWORD[0] == '\0') WiFi.begin(WIFI_SSID);
-      else WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-      lastWiFiAttempt = millis();
-    }
+    connectWiFi();
     lastTrackPoll = millis() - 20000UL;
   }
+}
+
+void connectWiFi() {
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!ntpStarted) {
+      configTime(0, 0, "pool.ntp.org", "time.google.com");
+      ntpStarted = true;
+    }
+    return;
+  }
+  if (lastWiFiAttempt && millis() - lastWiFiAttempt < 20000UL) return;
+  WiFi.mode(WIFI_STA);
+  if (WIFI_PASSWORD[0] == '\0') WiFi.begin(WIFI_SSID);
+  else WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  lastWiFiAttempt = millis();
+}
+
+bool validReleaseId(const String &id) {
+  if (id.length() != 36) return false;
+  for (int i = 0; i < 36; ++i) {
+    if (i == 8 || i == 13 || i == 18 || i == 23) {
+      if (id[i] != '-') return false;
+    } else if (!isxdigit(static_cast<unsigned char>(id[i]))) return false;
+  }
+  return true;
+}
+
+bool downloadCdCover(const String &releaseId, const char *kind) {
+  if (!filesystemReady || !validReleaseId(releaseId)) return false;
+  WiFiClientSecure client;
+  client.useBuiltinCACertBundle();
+  HTTPClient http;
+  http.setTimeout(8000);
+  String url = "https://wsrv.nl/?url=coverartarchive.org/" + String(kind) + "/" +
+               releaseId + "/front-250&w=160&h=160&fit=cover&output=jpg&q=75";
+  if (!http.begin(client, url)) return false;
+  const char *headers[] = {"Content-Type"};
+  http.collectHeaders(headers, 1);
+  int response = http.GET();
+  if (response != HTTP_CODE_OK || http.getSize() > 80000 ||
+      !http.header("Content-Type").startsWith("image/jpeg")) {
+    http.end();
+    return false;
+  }
+  File file = LittleFS.open("/cd-cover.jpg", "w");
+  if (!file) { http.end(); return false; }
+  int bytes = http.writeToStream(&file);
+  file.close();
+  http.end();
+  if (bytes < 100 || bytes > 80000) {
+    LittleFS.remove("/cd-cover.jpg");
+    return false;
+  }
+  return true;
+}
+
+void drawCloudCover(const String &id, const String &groupId) {
+  bool found = downloadCdCover(id, "release");
+  if (!found) found = downloadCdCover(groupId, "release-group");
+  if (!found) return;
+  uint16_t width = 0, height = 0;
+  TJpgDec.getFsJpgSize(&width, &height, "/cd-cover.jpg", LittleFS);
+  if (!width || !height) return;
+  TJpgDec.setJpgScale(1);
+  if (TJpgDec.drawFsJpg(COVER_X, COVER_Y, "/cd-cover.jpg", LittleFS) == JDR_OK) drawCaseChrome();
+}
+
+void cloudExchange() {
+  if (mode != Mode::Library || !cloudConfigured() || WiFi.status() != WL_CONNECTED) return;
+  // Verified TLS needs a synchronized clock. Never send the reader token over
+  // an unverified connection, including during first boot.
+  if (time(nullptr) < 1700000000) return;
+
+  JsonDocument request;
+  request["reader_id"] = cloudReaderId;
+  request["device_token"] = cloudReaderToken;
+  request["is_connected"] = true;
+  if (cloudEventId.length()) {
+    request["event_id"] = cloudEventId;
+    request["tag_uid"] = cloudUid;
+  }
+  String body;
+  serializeJson(request, body);
+
+  WiFiClientSecure client;
+  client.useBuiltinCACertBundle();
+  HTTPClient http;
+  http.setTimeout(8000);
+  if (!http.begin(client, String(CD_CLOUD_URL) + "/rest/v1/rpc/reader_exchange")) return;
+  http.addHeader("apikey", CD_CLOUD_PUBLISHABLE_KEY);
+  http.addHeader("Content-Type", "application/json");
+  int response = http.POST(body);
+  if (response != HTTP_CODE_OK) {
+    Serial.printf("Account lookup HTTP status: %d\n", response);
+    http.end();
+    if (shownUid.length() && shownSummary.isEmpty()) {
+      drawMessage("ACCOUNT UNAVAILABLE", "Check Wi-Fi or pairing", "Then scan the CD again");
+      shownSummary = "error";
+    }
+    return;
+  }
+  JsonDocument result;
+  DeserializationError error = deserializeJson(result, http.getStream());
+  http.end();
+  if (error) { Serial.println("Account reply invalid"); return; }
+  String ack = result["ack"] | "";
+  if (cloudEventId.isEmpty() || ack != cloudEventId || !result["resolved"].as<bool>() ||
+      cloudUid != shownUid || mode != Mode::Library) return;
+  JsonVariant cd = result["cd"];
+  if (cd.isNull()) {
+    if (shownSummary != "new") {
+      drawMessage("NEW STICKER", "Add this CD on the website", "Sign in to CD Library");
+      shownSummary = "new";
+    }
+    return;
+  }
+  String album = cd["album"] | "";
+  String artist = cd["artist"] | "";
+  int trackCount = cd["trackCount"] | -1;
+  if (trackCount < 0) trackCount = cd["tracks"].as<JsonArray>().size();
+  String summary = album + "\n" + artist + "\n" + String(trackCount);
+  if (summary == shownSummary) return;
+  drawAlbum(cloudUid, album, artist, trackCount);
+  shownSummary = summary;
+  drawCloudCover(cd["id"] | "", cd["releaseGroupId"] | "");
 }
 
 String pickImageUrl(JsonArray images) {
@@ -583,6 +798,7 @@ void setup() {
   digitalWrite(TOUCH_CS, HIGH);
   filesystemReady = LittleFS.begin(true);
   if (!filesystemReady) Serial.println("LittleFS mount failed; music art unavailable");
+  readReaderCredential();
 
   SPI.begin(NFC_SCK, NFC_MISO, NFC_MOSI, NFC_CS);
   nfc.begin();
@@ -597,12 +813,7 @@ void loop() {
   readBridgeReplies();
   pollTouch();
   if (mode == Mode::Listening) {
-    if (WiFi.status() != WL_CONNECTED && millis() - lastWiFiAttempt >= 20000UL) {
-      WiFi.disconnect();
-      if (WIFI_PASSWORD[0] == '\0') WiFi.begin(WIFI_SSID);
-      else WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-      lastWiFiAttempt = millis();
-    }
+    connectWiFi();
     if (WiFi.status() == WL_CONNECTED && millis() - lastTrackPoll >= 20000UL) {
       lastTrackPoll = millis();
       getCurrentSong();
@@ -610,10 +821,23 @@ void loop() {
     return;
   }
   if (mode != Mode::Library) return;
+  if (cloudConfigured()) {
+    connectWiFi();
+    unsigned long interval = cloudEventId.length() ? 2500UL : 12000UL;
+    if (WiFi.status() == WL_CONNECTED && millis() - lastCloudPoll >= interval) {
+      lastCloudPoll = millis();
+      cloudExchange();
+    }
+    if (shownUid.length() && shownSummary.isEmpty() && millis() - pendingSince > 8000UL) {
+      drawMessage("LOOKUP DELAYED", "Check Wi-Fi connection", "Your scan will retry");
+      shownSummary = "waiting";
+    }
+  } else {
   if (shownUid.length() && shownSummary.isEmpty() &&
       millis() - pendingSince > 3000) {
     drawMessage("BRIDGE NOT RESPONDING", "Open the local bridge", "on your computer and scan again");
     shownSummary = "waiting";
+  }
   }
 
   if (!nfcReady || millis() - lastNfcPoll < 700) return;
@@ -629,15 +853,26 @@ void loop() {
     }
     uidText.toUpperCase();
 
-    if (uidText != shownUid) {
+    bool freshTag = uidText != lastReportedUid || millis() - lastTagSeenAt > 1600UL;
+    lastTagSeenAt = millis();
+    if (uidText != shownUid || (cloudConfigured() && freshTag)) {
       shownUid = uidText;
       shownSummary = "";
       pendingSince = millis();
-      drawMessage("LOOKING UP CD", "Tag " + uidText, "Checking your local library...");
+      drawMessage("LOOKING UP CD", "Tag " + uidText,
+                  cloudConfigured() ? "Checking your account..." : "Checking your local library...");
     }
-
-    Serial.print("Tag detected. UID: ");
-    Serial.println(uidText);
-    readBridgeReplies();
+    if (cloudConfigured()) {
+      if (freshTag) {
+        cloudUid = uidText;
+        cloudEventId = newScanId();
+        lastCloudPoll = millis() - 2500UL;
+        lastReportedUid = uidText;
+      }
+    } else {
+      Serial.print("Tag detected. UID: ");
+      Serial.println(uidText);
+      readBridgeReplies();
+    }
   }
 }
