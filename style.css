@@ -721,3 +721,13 @@ dialog::backdrop { background: #302219a6; }
   .detail-cover { width: 96px; height: 96px; }
   dialog { padding: 20px; }
 }
+
+/* The visible spine lettering belongs to the 3D insert; these buttons retain keyboard access. */
+.stack-stage.is-3d .stack-spine-copy { opacity: 0; }
+.stack-stage.is-3d .stack-case:focus-visible { outline: 2px solid #603e28; outline-offset: -2px; background: #ffffff20; }
+body.stack-active .stack-view { padding-left: 0; padding-right: 0; background: #b6a18b; }
+body.stack-active .stack-toolbar { padding: 0 clamp(24px, 5vw, 88px); margin-bottom: 18px; }
+body.stack-active .stack-preview { right: clamp(24px, 5vw, 88px); }
+@media (max-width: 900px) {
+  body.stack-active .stack-preview { right: auto; width: calc(100% - 36px); }
+}
