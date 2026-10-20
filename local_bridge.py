@@ -193,7 +193,9 @@ def send_screen_update(device, uid, last_cover_uid):
         result, ensure_ascii=True, separators=(",", ":")
     ) + "\n"
     device.write(reply.encode("ascii"))
-    if result["cd"] is not None and uid != last_cover_uid:
+    if result["cd"] is None:
+        return None
+    if uid != last_cover_uid:
         cover = cover_for_uid(uid)
         if cover:
             print(f"Sending {len(cover)} cover bytes for {uid}", flush=True)
