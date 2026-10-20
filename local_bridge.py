@@ -196,6 +196,7 @@ def send_screen_update(device, uid, last_cover_uid):
     if result["cd"] is not None and uid != last_cover_uid:
         cover = cover_for_uid(uid)
         if cover:
+            print(f"Sending {len(cover)} cover bytes for {uid}", flush=True)
             device.write(f"NFC_COVER {uid} {len(cover)}\n".encode("ascii"))
             device.write(cover)
         return uid
@@ -219,6 +220,8 @@ def read_serial(port):
                 print(f"Reading NFC scans from {port}", flush=True)
                 while True:
                     line = device.readline().decode("utf-8", errors="replace")
+                    if line.startswith(("Cover received ", "JPEG decode result ")):
+                        print(line.strip(), flush=True)
                     match = TAG_LINE.search(line)
                     if match:
                         try:

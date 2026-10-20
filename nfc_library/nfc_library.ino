@@ -143,9 +143,12 @@ void receiveCover(const String &line) {
   }
 
   size_t received = Serial.readBytes(jpeg, length);
+  Serial.printf("Cover received %u/%d bytes\n", static_cast<unsigned>(received), length);
   if (received == static_cast<size_t>(length) && uid == shownUid &&
       shownSummary != "new" && shownSummary != "waiting") {
-    if (TJpgDec.drawJpg(COVER_X, COVER_Y, jpeg, length) != JDR_OK) {
+    JRESULT result = TJpgDec.drawJpg(COVER_X, COVER_Y, jpeg, length);
+    Serial.printf("JPEG decode result %d\n", static_cast<int>(result));
+    if (result != JDR_OK) {
       drawCoverPlaceholder();
     } else {
       drawCaseChrome();
@@ -203,6 +206,9 @@ void readBridgeReplies() {
 }
 
 void setup() {
+  // The bridge can send up to 35 KB of JPEG data while NFC polling is busy.
+  // The default 256-byte UART receive buffer loses most of that packet.
+  Serial.setRxBufferSize(40000);
   Serial.begin(115200);
   Serial.setTimeout(8000);
   delay(1000);
