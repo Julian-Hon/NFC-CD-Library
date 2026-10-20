@@ -75,7 +75,6 @@ const railMaterial = new THREE.MeshPhysicalMaterial({
   envMapIntensity: .65
 });
 const edgeMaterial = new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0, roughness: .08, transparent: true, opacity: .18, depthWrite: false, clearcoat: 1, envMapIntensity: .65 });
-const darkRailMaterial = new THREE.MeshStandardMaterial({ color: '#363430', roughness: .32 });
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 const entries = [];
@@ -111,40 +110,13 @@ function fitText(context, value, maximum, initialSize, minimumSize = 28) {
   return size;
 }
 
-function spineTexture(cd, index = 0, artwork = null) {
+function spineTexture(cd) {
   const hash = [...`${cd.artist}${cd.album}`].reduce((sum, letter) => (sum * 31 + letter.charCodeAt(0)) >>> 0, 7);
-  let rgb = [[211, 205, 188], [55, 59, 66], [73, 102, 112], [158, 129, 111]][hash % 4];
-  if (artwork) {
-    try {
-      const sampler = document.createElement('canvas'); sampler.width = sampler.height = 8;
-      const context = sampler.getContext('2d', { willReadFrequently: true });
-      context.drawImage(artwork, 0, 0, 8, 8);
-      const pixels = context.getImageData(0, 0, 8, 8).data;
-      const sum = [0, 0, 0];
-      for (let i = 0; i < pixels.length; i += 4) for (let c = 0; c < 3; c++) sum[c] += pixels[i + c];
-      rgb = sum.map(value => Math.round(value / 64));
-    } catch { /* An inaccessible image still has a readable metadata-based spine. */ }
-  }
-  const dark = rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722 < 125;
   return canvasTexture((context, width, height) => {
-    context.fillStyle = `rgb(${rgb.join(',')})`;
+    context.fillStyle = '#e8e2d7';
     context.fillRect(0, 0, width, height);
-    if (artwork) {
-      context.globalAlpha = .25;
-      context.drawImage(artwork, 0, 0, width, height);
-      context.globalAlpha = 1;
-    }
-    context.fillStyle = dark ? 'rgba(10,12,15,.38)' : 'rgba(255,249,233,.65)';
-    context.fillRect(0, 0, width * .88, height);
-    let seed = hash;
-    for (let i = 0; i < 220; i++) {
-      seed = (seed * 16807) % 2147483647;
-      const x = seed % width, y = (seed >> 4) % height;
-      context.fillStyle = i % 2 ? '#ffffff12' : '#0000000c';
-      context.fillRect(x, y, 1 + seed % 9, 1);
-    }
     context.textBaseline = 'middle';
-    context.fillStyle = dark ? '#f1eee6' : '#222326';
+    context.fillStyle = '#272622';
     const artistWidth = Math.min(700, Math.max(330, cd.artist.length * 35));
     fitText(context, cd.artist, artistWidth - 65, 64, 32);
     context.fillText(cd.artist, 48, height / 2, artistWidth - 65);
@@ -207,9 +179,6 @@ function addCover(entry, cd) {
       entry.coverMaterial.map.dispose();
       entry.coverMaterial.map = texture;
       entry.coverMaterial.needsUpdate = true;
-      entry.spineMaterial.map.dispose();
-      entry.spineMaterial.map = spineTexture(cd, entry.index, texture.image);
-      entry.spineMaterial.needsUpdate = true;
       requestDraw();
     }, undefined, () => tryPath(index + 1));
   }
@@ -238,7 +207,7 @@ function makeCase(cd, index, total) {
   cover.castShadow = true;
   cover.receiveShadow = true;
   group.add(cover);
-  const spine = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - .34, HEIGHT - .12), new THREE.MeshStandardMaterial({ map: spineTexture(cd, index), roughness: .78 }));
+  const spine = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - .34, HEIGHT - .12), new THREE.MeshStandardMaterial({ map: spineTexture(cd), roughness: .78 }));
   spine.position.set(.07, 0, DEPTH / 2 - .06);
   group.add(spine);
 
@@ -248,7 +217,6 @@ function makeCase(cd, index, total) {
   rail(group, [WIDTH, HEIGHT - .025, .025], [0, 0, -DEPTH / 2 + .0125]);
   rail(group, [.025, HEIGHT, DEPTH], [WIDTH / 2 - .0125, 0, 0]);
   rail(group, [.025, HEIGHT, DEPTH], [-WIDTH / 2 + .0125, 0, 0]);
-  rail(group, [.42, .055, DEPTH - .12], [-WIDTH / 2 + .27, -HEIGHT / 2 + .08, 0], darkRailMaterial);
   for (let groove = 0; groove < 15; groove++) {
     rail(group, [.28, .035, .023], [-WIDTH / 2 + .26, HEIGHT / 2 - .065, -DEPTH / 2 + .2 + groove * .32]);
   }
@@ -257,7 +225,7 @@ function makeCase(cd, index, total) {
     const rim = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(WIDTH - .01, .018, DEPTH - .01)), new THREE.LineBasicMaterial({ color: '#c9cfcd', transparent: true, opacity: .38 }));
     rim.position.y = y;
     group.add(rim);
-    const seam = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(WIDTH - .035, .012, DEPTH - .035)), new THREE.LineBasicMaterial({ color: '#303935', transparent: true, opacity: .5 }));
+    const seam = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(WIDTH - .035, .012, DEPTH - .035)), new THREE.LineBasicMaterial({ color: '#b7b5ad', transparent: true, opacity: .3 }));
     seam.position.y = y - .018;
     group.add(seam);
     rail(group, [WIDTH - .035, .018, .025], [0, y + .025, DEPTH / 2 - .035]);
@@ -267,7 +235,7 @@ function makeCase(cd, index, total) {
   }
   const hit = new THREE.Mesh(new THREE.BoxGeometry(WIDTH, HEIGHT, DEPTH), new THREE.MeshBasicMaterial({ visible: false }));
   group.add(hit);
-  const entry = { group, paper: hit, spineMaterial: spine.material, coverMaterial, baseX, baseY, baseZ, alive: true, index };
+  const entry = { group, paper: hit, coverMaterial, baseX, baseY, baseZ, alive: true, index };
   addCover(entry, cd);
   return entry;
 }
@@ -280,7 +248,7 @@ function clearCases() {
       object.geometry?.dispose();
       if (!object.material) return;
       for (const material of (Array.isArray(object.material) ? object.material : [object.material])) {
-        if (material === railMaterial || material === edgeMaterial || material === darkRailMaterial) continue;
+        if (material === railMaterial || material === edgeMaterial) continue;
         material.map?.dispose();
         material.dispose();
       }
@@ -354,15 +322,22 @@ function draw(now) {
   resize();
   let moving = false;
   for (const entry of entries) {
+    // The selected case becomes the exposed top case, so the visible cover
+    // always belongs to the title on its spine. Cases above it close the gap.
+    const stackIndex = entry.index === selected ? 0 : entry.index < selected ? entry.index + 1 : entry.index;
+    const targetY = HEIGHT / 2 + (entries.length - 1 - stackIndex) * SPACING + (entry.index === selected ? .055 : 0);
     const targetX = entry.baseX + (entry.index === selected ? .44 : entry.index === hovered ? .24 : 0);
-    if (entry.targetX !== targetX) {
+    if (entry.targetX !== targetX || entry.targetY !== targetY) {
       entry.startX = entry.group.position.x;
+      entry.startY = entry.group.position.y;
       entry.targetX = targetX;
+      entry.targetY = targetY;
       entry.motionStart = now;
     }
-    const progress = animate && !reducedMotion.matches ? Math.min(1, (now - entry.motionStart) / 300) : 1;
+    const progress = animate && !reducedMotion.matches ? Math.min(1, (now - entry.motionStart) / 520) : 1;
     const eased = progress * progress * (3 - 2 * progress);
     entry.group.position.x = entry.startX + (targetX - entry.startX) * eased;
+    entry.group.position.y = entry.startY + (targetY - entry.startY) * eased;
     if (progress < 1) moving = true;
   }
   positionLabels();
