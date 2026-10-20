@@ -1,4 +1,4 @@
-const VIEW_KEY = 'digital-cd-library:view:v1';
+const VIEW_KEY = 'digital-cd-library:view:v2';
 const MOTION_KEY = 'digital-cd-library:motion:v1';
 const MUSICBRAINZ = 'https://musicbrainz.org/ws/2';
 const COVER_ART = 'https://coverartarchive.org';
@@ -19,9 +19,9 @@ let suppressStackClick = false;
 
 function loadView() {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'stack' ? 'stack' : 'grid';
+    return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'stack';
   } catch {
-    return 'grid';
+    return 'stack';
   }
 }
 
