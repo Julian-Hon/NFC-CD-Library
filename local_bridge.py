@@ -283,7 +283,11 @@ class Handler(BaseHTTPRequestHandler):
                 "cd": json.loads(row["payload"]) if row["payload"] else None,
             }})
             return
-        names = {"/": "index.html", "/index.html": "index.html", "/app.js": "app.js", "/style.css": "style.css"}
+        names = {
+            "/": "index.html", "/index.html": "index.html",
+            "/app.js": "app.js", "/auth.js": "auth.js",
+            "/supabase-config.js": "supabase-config.js", "/style.css": "style.css",
+        }
         filename = names.get(path)
         if filename is None:
             self.send_error(404)

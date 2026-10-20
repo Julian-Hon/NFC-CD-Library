@@ -12,6 +12,14 @@ The `music_hub` firmware combines the Last.fm music display and NFC CD library o
 
 The older `music_display` and `nfc_library` sketches remain available as independent diagnostics. The combined firmware needs Wi-Fi only in Listening mode; CD scans still travel over USB to the local bridge. If the PN532 is unavailable, the home screen and Listening mode can still run.
 
+## Supabase account sign-in
+
+The website's header has email sign-up, sign-in, and sign-out using the project's URL and **publishable** key in `supabase-config.js`. The publishable key is safe in browser code only because the database tables have row level security policies. Never add a Supabase `sb_secret_` key or database password to this repository or the website.
+
+Signing in does not yet migrate or sync the CD library. The USB bridge continues using the local SQLite database, and the GitHub Pages version continues using that browser's local storage. The next step is to add a reviewed import into the account's `cds` and `tag_links` tables and then update the bridge lookup flow.
+
+Supabase's default email sender is intended for testing with project team email addresses. Public sign-ups will need a configured SMTP provider.
+
 ## Digital CD Library webpage
 
 The companion website is at the repository root. Serve this folder locally (for example, `python -m http.server 8000`) and open `http://localhost:8000/`.

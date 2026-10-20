@@ -6,12 +6,17 @@
   <meta name="theme-color" content="#f7f7f5">
   <meta name="description" content="Digital CD Library — catalog your physical CD collection.">
   <title>Digital CD Library</title>
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <div class="page">
     <header class="site-header">
       <a class="brand" href="index.html" aria-label="Digital CD Library home"><span class="brand-mark" aria-hidden="true">◉</span><span>Digital CD Library</span></a>
+      <div id="auth-controls" class="auth-controls" hidden>
+        <span id="auth-user" class="auth-user" hidden></span>
+        <button id="auth-open" class="auth-button" type="button">Sign in</button>
+        <button id="auth-sign-out" class="auth-button" type="button" hidden>Sign out</button>
+      </div>
     </header>
 
     <main class="library" aria-labelledby="library-title">
@@ -62,6 +67,7 @@
         <p id="empty-description">Add an album to start your library, then explore it in Grid or Stack view.</p>
       </div>
       <p class="storage-note">Saved CDs stay in this browser on this site. Libraries on other sites or devices are separate.</p>
+      <p id="auth-storage-note" class="storage-note" hidden>Signing in connects your account. Your existing CDs remain in this browser or the local USB bridge until the library migration is complete.</p>
     </main>
   </div>
 
@@ -85,6 +91,19 @@
     </div>
     <p class="data-credit">Album data from <a href="https://musicbrainz.org/" target="_blank" rel="noopener noreferrer">MusicBrainz</a> · Covers from <a href="https://coverartarchive.org/" target="_blank" rel="noopener noreferrer">Cover Art Archive</a></p>
   </dialog>
+  <dialog id="auth-dialog" class="auth-dialog" aria-labelledby="auth-title">
+    <div class="dialog-heading"><h2 id="auth-title">Sign in</h2><button id="auth-close" class="close-button" type="button" aria-label="Close">×</button></div>
+    <form id="auth-form">
+      <label>Email<input id="auth-email" type="email" autocomplete="email" required></label>
+      <label>Password<input id="auth-password" type="password" autocomplete="current-password" minlength="6" required></label>
+      <button id="auth-submit" class="primary-button" type="submit">Sign in</button>
+    </form>
+    <p id="auth-status" class="status" role="status" aria-live="polite"></p>
+    <button id="auth-toggle" class="auth-toggle" type="button">Need an account? Sign up</button>
+  </dialog>
+  <script src="supabase-config.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="auth.js?v=1" defer></script>
   <script src="app.js?v=6" defer></script>
 </body>
 </html>
