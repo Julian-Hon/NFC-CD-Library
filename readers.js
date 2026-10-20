@@ -5,6 +5,7 @@
   const list = document.querySelector('#readers-list');
   const button = document.createElement('button');
   button.textContent = 'My readers';
+  button.hidden = !window.cdLibraryAuth?.user;
   document.querySelector('.account-popover').prepend(button);
   let busy = false, owner = null, readers = [], handled = new Map(), responses = new Map();
   const auth = () => window.cdLibraryAuth;
@@ -82,6 +83,7 @@
       }
     } catch (error) {
       status.textContent = `Reader service unavailable. Apply the reader-pairing SQL migration if not installed. ${error.message}`;
+      if (!['localhost', '127.0.0.1'].includes(location.hostname)) document.querySelector('#reader-indicator').dataset.state = 'issue';
     } finally { busy = false; }
   }
   button.onclick = () => { document.querySelector('#profile-menu').open = false; dialog.showModal(); status.textContent = ''; void poll(); };
@@ -108,6 +110,7 @@
     finally { create.disabled = false; }
   };
   window.addEventListener('cd-library-auth-change', () => {
+    button.hidden = !auth()?.user;
     if (owner !== auth()?.user?.id) {
       owner = auth()?.user?.id; readers = []; handled.clear(); responses.clear(); clearCredential();
       if (dialog.open) dialog.close();
