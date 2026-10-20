@@ -117,11 +117,20 @@
     <p id="auth-status" class="status" role="status" aria-live="polite"></p>
     <button id="auth-toggle" class="auth-toggle" type="button">Need an account? Sign up</button>
   </dialog>
+  <dialog id="readers-dialog" aria-labelledby="readers-title">
+    <div class="dialog-heading"><h2 id="readers-title">My readers</h2><button id="readers-close" class="close-button" aria-label="Close readers">×</button></div>
+    <p>Link your USB reader to this account to scan CDs on the live website. Keep the bridge running on the computer connected to your ESP32.</p>
+    <div id="readers-list"></div>
+    <form id="reader-pair-form"><label>Reader name<input id="reader-name" value="My ESP32" maxlength="80" required></label><button class="primary-button" id="reader-create">Pair a reader</button></form>
+    <div id="reader-credential-panel" hidden><p>Copy this credential now. It will not be shown again. Keep it private.</p><textarea id="reader-credential" readonly aria-label="Reader credential"></textarea><p>On the computer connected to the ESP32, stop the old bridge and run:</p><pre>python local_bridge.py --serial COM3 --pair --cloud</pre><p>Paste the credential at the hidden prompt. For later starts, use <code>python local_bridge.py --serial COM3 --cloud</code>.</p></div>
+    <p id="readers-status" role="status"></p>
+  </dialog>
   <script src="supabase-config.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script src="auth.js?v=4" defer></script>
   <script src="library-ui.js?v=1" defer></script>
-  <script src="app.js?v=12" defer></script>
+  <script src="app.js?v=13" defer></script>
+  <script src="readers.js?v=1" defer></script>
   <script type="module" src="stack-3d.js?v=3"></script>
 </body>
 </html>

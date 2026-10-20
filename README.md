@@ -62,6 +62,20 @@ If it prints `PN532 not found`, unplug USB before adjusting wires, then check th
 
 ## NFC library workflow (local prototype)
 
+### Pair a USB reader with the live website
+
+1. Run [supabase/reader-pairing.sql](supabase/reader-pairing.sql) once in the project's Supabase SQL Editor. This adds a separate reader table, owner-only row policies, restricted response-column permissions, and a token-checked device RPC. It does not change existing album/tag tables.
+2. Sign in on the GitHub Pages site. Open **Account → My readers → Pair a reader**. Give it a recognizable name and copy the credential shown once. Never commit or share that credential.
+3. Stop the existing USB bridge. Run `python local_bridge.py --serial COM3 --pair --cloud` from this repository. Paste the credential at the hidden prompt. It is stored in ignored `local_data/reader-credential.json`, not in firmware or shell arguments.
+4. Keep the live website open and signed in. A scan travels from ESP32 → USB bridge → Supabase → your account's website. The website resolves the tag using its existing account-scoped library, selects the album, and sends its display data back to the same reader. New tags open the existing Add CD workflow; saving the CD also updates the waiting reader.
+5. Subsequent starts use `python local_bridge.py --serial COM3 --cloud`. Use **My readers → Revoke** to disable a credential immediately, then pair again if needed.
+
+This first cloud relay still requires the USB computer and an open signed-in website for album resolution. It does not implement direct ESP32 Wi-Fi or autonomous offline account access. The website stays on GitHub Pages and never needs permission to reach localhost. Scans/heartbeats poll roughly every 2–2.5 seconds; the indicator becomes offline after 15 seconds without a heartbeat. Only the latest scan per reader is retained. Scans older than 30 seconds are not replayed into the UI when the page opens. Internet failures retain the latest pending scan in the running bridge for retry; process restarts do not replay it.
+
+The database stores only a SHA-256 hash of a random 256-bit reader credential. The credential permits only this reader's heartbeat, scan submission, and display response retrieval, not account sign-in or library browsing. Owners can read and revoke only their own reader records. Protect the local credential file like a password. Security approach follows [Supabase's function permissions guidance](https://supabase.com/docs/guides/database/functions).
+
+Run `python tests/test_cloud_reader.py` for relay retry, response, and stale-scan checks; the existing `node tests/library-ui.cjs` checks UI scan selection and enrollment with simulated events. Live database access policies and a real paired sticker scan must also be verified after applying the migration.
+
 The local bridge reads the `Tag detected. UID: ...` lines from the ESP32, saves scans and CDs in a local SQLite database, and serves this website at `http://127.0.0.1:8317/`. A new tag opens the Add CD flow in the website; after saving, another scan brings up the linked album in the website's scan panel and on the ESP32 screen. The tag stores only its factory UID; album information is stored in the database.
 
 1. Upload `nfc_library/nfc_library.ino` to the ESP32. It uses Adafruit PN532, ArduinoJson, TFT_eSPI, and TJpg_Decoder. Keep the same PN532 wiring described above. This board's TFT_eSPI setup must use its display pins on **HSPI** (`USE_HSPI_PORT`), leaving the NFC reader on VSPI. The sketch temporarily replaces the music-display sketch while you test the CD library.

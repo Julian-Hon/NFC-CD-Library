@@ -68,6 +68,11 @@ summary::-webkit-details-marker { display: none; }
 .stack-stage.is-3d .stack-case:focus-visible { outline: 2px solid #414b62; outline-offset: -2px; background: #fff2; }
 .stack-preview { position: absolute; top: 50%; right: 3.2%; width: 27%; max-width: 400px; transform: translateY(-50%); text-align: left; }
 .stack-position { display: block; font-size: 11px; letter-spacing: .09em; margin-bottom: 14px; color: #575650; }
+#readers-dialog { width: min(580px, calc(100vw - 32px)); }
+#reader-credential { width: 100%; min-height: 80px; font-family: monospace; overflow-wrap: anywhere; }
+#readers-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #eeeae3; padding: 12px; }
+#reader-pair-form { display: grid; gap: 12px; }
+#readers-list p { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .stack-preview-cover { width: 100%; aspect-ratio: 1; box-shadow: 0 15px 28px #342a2740; background: #e9e1d4; }
 .album-cover { width: 100%; aspect-ratio: 1; object-fit: cover; display: grid; place-items: center; background: #e5ded4; color: #877c70; font-size: 4rem; }
 .stack-preview h3 { margin: 22px 0 3px; font-size: clamp(24px, 2.4vw, 34px); line-height: 1.12; font-weight: 650; letter-spacing: -.6px; overflow-wrap: anywhere; }

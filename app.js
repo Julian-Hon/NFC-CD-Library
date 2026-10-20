@@ -149,11 +149,11 @@ function renderScan(scan, cd = null) {
   }
 }
 
-async function pollLatestScan() {
+async function pollLatestScan(cloudData = null) {
   if (state.scanBusy) return;
   state.scanBusy = true;
   try {
-    const { scan, reader } = await bridgeRequest('/api/scans/latest');
+    const { scan, reader } = cloudData || await bridgeRequest('/api/scans/latest');
     const indicator = document.querySelector('#reader-indicator');
     indicator.dataset.state = reader?.connected ? 'connected' : reader?.port ? 'issue' : 'offline';
     indicator.title = reader?.connected ? `NFC reader connected · ${reader.port}` : 'NFC reader unavailable. Click for details.';
@@ -733,3 +733,7 @@ connectStackRenderer();
 renderLibrary();
 onAuthChange();
 void initBridge();
+let cloudScanQueue = Promise.resolve();
+window.addEventListener('cloud-reader-scan', event => {
+  if (!state.bridge) cloudScanQueue = cloudScanQueue.then(() => pollLatestScan(event.detail));
+});
