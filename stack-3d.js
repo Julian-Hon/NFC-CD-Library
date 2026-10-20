@@ -4,12 +4,13 @@ const stage = document.querySelector('.stack-stage');
 const canvas = document.querySelector('#stack-canvas');
 const buttons = document.querySelector('#cd-stack');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-// Standard jewel case proportions: 142 × 124 × 10.4 mm.
-const WIDTH = 5.68;
+// Keep a narrow clear hinge beside the nearly full-size square booklet.
+const WIDTH = 5.48;
 const DEPTH = 4.96;
 const HEIGHT = .416;
-const COVER_SIZE = 4.72;
-const COVER_X = .3;
+const COVER_SIZE = 4.88;
+const COVER_X = (WIDTH - COVER_SIZE) / 2 - .04;
+const COVER_Z = (DEPTH - COVER_SIZE) / 2 - .03;
 const SPACING = HEIGHT + .012;
 const offsets = [-.18, .13, -.09, .22, -.14, .08, -.2, .16];
 const scene = new THREE.Scene();
@@ -230,15 +231,15 @@ function makeCase(cd, index, total) {
   scene.add(group);
 
   // The insert is paper inside a thin shell, not a solid opaque case-sized block.
-  const paper = new THREE.Mesh(new THREE.BoxGeometry(WIDTH - .18, .045, DEPTH - .18), new THREE.MeshStandardMaterial({ color: '#d5d0c7', roughness: .85 }));
-  paper.position.y = -HEIGHT / 2 + .065;
+  const paper = new THREE.Mesh(new THREE.BoxGeometry(COVER_SIZE + .06, .045, COVER_SIZE + .06), new THREE.MeshStandardMaterial({ color: '#d5d0c7', roughness: .85 }));
+  paper.position.set(COVER_X, -HEIGHT / 2 + .065, COVER_Z);
   paper.castShadow = true;
   paper.receiveShadow = true;
   group.add(paper);
   const coverMaterial = new THREE.MeshStandardMaterial({ map: placeholderCover(cd, index), roughness: .7 });
   const cover = new THREE.Mesh(new THREE.PlaneGeometry(COVER_SIZE, COVER_SIZE), coverMaterial);
   cover.rotation.x = -Math.PI / 2;
-  cover.position.set(COVER_X, HEIGHT / 2 - .065, 0);
+  cover.position.set(COVER_X, HEIGHT / 2 - .065, COVER_Z);
   cover.castShadow = true;
   cover.receiveShadow = true;
   group.add(cover);
