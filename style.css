@@ -167,6 +167,25 @@ button:focus-visible, input:focus-visible, .album-card:focus-visible {
 }
 .storage-note { margin: 22px 0 0; color: var(--muted); font-size: .8rem; }
 
+.scan-panel {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: -5px 0 28px;
+  padding: 19px 22px;
+  border: 1px solid #cbd5ff;
+  border-radius: 12px;
+  background: linear-gradient(110deg, #f4f6ff, #fff);
+}
+.scan-indicator { color: var(--accent); font-size: 2rem; line-height: 1; }
+.scan-copy { min-width: 0; flex: 1; }
+.scan-eyebrow { color: var(--accent); font-size: .68rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.scan-copy h2 { margin: 4px 0 2px; font-size: 1.1rem; }
+.scan-copy p { margin: 0; color: var(--muted); font-size: .82rem; overflow-wrap: anywhere; }
+.scan-action { border: 1px solid #cbd5ff; border-radius: 7px; padding: 10px 14px; color: var(--accent); background: white; font-weight: 700; }
+.scan-action:hover { background: var(--tint); }
+.tag-enrollment { margin: 0 0 15px; padding: 10px 12px; border-radius: 7px; background: var(--tint); color: var(--accent); font-size: .84rem; font-weight: 700; }
+
 .album-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -469,6 +488,9 @@ dialog::backdrop { background: #182037a6; }
   .section-heading > div:first-child { display: block; }
   .section-heading h1 { margin-bottom: 12px; }
   .library-actions { width: 100%; justify-content: space-between; }
+  .scan-panel { align-items: flex-start; flex-wrap: wrap; gap: 10px; }
+  .scan-copy { flex-basis: calc(100% - 48px); }
+  .scan-action { margin-left: 40px; }
   .album-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .stack-view { padding: 20px 10px 26px; }
   .stack-toolbar { display: grid; justify-items: center; gap: 8px; }

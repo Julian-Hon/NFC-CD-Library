@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f7f5">
   <meta name="description" content="Digital CD Library — catalog your physical CD collection.">
   <title>Digital CD Library</title>
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
   <div class="page">
@@ -25,6 +25,15 @@
           <button id="add-cd" class="primary-button" type="button">+ Add CD</button>
         </div>
       </div>
+      <section id="scan-panel" class="scan-panel" aria-label="NFC scanner" hidden>
+        <div class="scan-indicator" aria-hidden="true">◉</div>
+        <div class="scan-copy">
+          <span id="reader-status" class="scan-eyebrow">Local NFC bridge</span>
+          <h2 id="scan-title">Waiting for a CD scan</h2>
+          <p id="scan-description">Hold a tagged CD case near the red reader.</p>
+        </div>
+        <button id="scan-action" class="scan-action" type="button" hidden></button>
+      </section>
       <div id="album-grid" class="album-grid" aria-live="polite"></div>
       <section id="stack-view" class="stack-view" aria-label="CD stack" hidden>
         <div class="stack-toolbar">
@@ -59,6 +68,7 @@
   <dialog id="cd-dialog" aria-labelledby="dialog-title">
     <div class="dialog-heading"><h2 id="dialog-title">Add a CD</h2><button id="close-dialog" class="close-button" type="button" aria-label="Close">×</button></div>
     <div id="search-stage">
+      <p id="tag-enrollment" class="tag-enrollment" hidden></p>
       <form id="search-form">
         <label>Album name<input id="album-name" type="text" autocomplete="off" maxlength="160" required placeholder="e.g. In Rainbows"></label>
         <label>Artist name<input id="artist-name" type="text" autocomplete="off" maxlength="160" required placeholder="e.g. Radiohead"></label>
@@ -75,6 +85,6 @@
     </div>
     <p class="data-credit">Album data from <a href="https://musicbrainz.org/" target="_blank" rel="noopener noreferrer">MusicBrainz</a> · Covers from <a href="https://coverartarchive.org/" target="_blank" rel="noopener noreferrer">Cover Art Archive</a></p>
   </dialog>
-  <script src="app.js?v=5" defer></script>
+  <script src="app.js?v=6" defer></script>
 </body>
 </html>

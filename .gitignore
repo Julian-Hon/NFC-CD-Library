@@ -7,3 +7,7 @@ build/
 *.bin
 *.elf
 *.map
+
+# Local NFC bridge database
+local_data/
+__pycache__/

@@ -12,7 +12,7 @@ const grid = document.querySelector('#album-grid');
 const stackView = document.querySelector('#stack-view');
 const stack = document.querySelector('#cd-stack');
 const stackPeek = document.querySelector('#stack-peek');
-const state = { cds: loadCds(), selected: null, mode: 'new', view: loadView(), animateStack: loadMotion(), activeIndex: 0, lastRequestAt: 0, transitioning: false };
+const state = { cds: loadCds(), selected: null, mode: 'new', view: loadView(), animateStack: loadMotion(), activeIndex: 0, lastRequestAt: 0, transitioning: false, bridge: false, pendingUid: null, lastScanId: 0, currentScan: null };
 const requestCache = new Map();
 let requestQueue = Promise.resolve();
 let stackDrag = null;
@@ -67,6 +67,82 @@ function saveCds() {
   } catch {
     alert('Could not save this CD in your browser. Check that browser storage is enabled.');
     return false;
+  }
+}
+
+async function bridgeRequest(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...options.headers }
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'The local NFC bridge could not save this CD.');
+  return data;
+}
+
+function renderScan(scan) {
+  state.currentScan = scan;
+  const title = document.querySelector('#scan-title');
+  const description = document.querySelector('#scan-description');
+  const action = document.querySelector('#scan-action');
+  action.hidden = !scan;
+  action.onclick = null;
+  if (!scan) {
+    title.textContent = 'Waiting for a CD scan';
+    description.textContent = 'Hold a tagged CD case near the red reader.';
+  } else if (scan.cd) {
+    title.textContent = scan.cd.album;
+    description.textContent = `${scan.cd.artist} · Tag ${scan.uid}`;
+    action.textContent = 'View CD';
+    action.onclick = () => showDetails(scan.cd, 'saved');
+  } else {
+    title.textContent = 'New tag detected';
+    description.textContent = `Tag ${scan.uid} is ready for a CD.`;
+    action.textContent = 'Add this CD';
+    action.onclick = () => openAdd(scan.uid);
+  }
+}
+
+async function pollLatestScan() {
+  try {
+    const { scan, reader } = await bridgeRequest('/api/scans/latest');
+    document.querySelector('#reader-status').textContent = reader?.connected
+      ? `NFC reader connected · ${reader.port}`
+      : reader?.port ? `Reader unavailable · ${reader.port}` : 'Local NFC bridge · test mode';
+    if (!scan) {
+      renderScan(null);
+      if (reader?.port && !reader.connected) {
+        document.querySelector('#scan-description').textContent = 'Close Arduino Serial Monitor so the bridge can use the reader.';
+      }
+      return;
+    }
+    if (scan.id === state.lastScanId) return;
+    const firstScan = state.lastScanId === 0;
+    state.lastScanId = scan.id;
+    renderScan(scan);
+    const recent = Date.now() - Date.parse(scan.scannedAt) < 30_000;
+    if (!scan.cd && (recent || !firstScan) && !dialog.open) openAdd(scan.uid);
+  } catch {
+    document.querySelector('#scan-title').textContent = 'Reader connection lost';
+    document.querySelector('#scan-description').textContent = 'Restart the local NFC bridge to receive scans.';
+    document.querySelector('#scan-action').hidden = true;
+  }
+}
+
+async function initBridge() {
+  try {
+    const { cds } = await bridgeRequest('/api/library');
+    if (!Array.isArray(cds)) return;
+    state.bridge = true;
+    state.cds = cds;
+    document.querySelector('#scan-panel').hidden = false;
+    document.querySelector('.storage-note').textContent = 'With the local NFC bridge running, CDs and tag links are saved on this computer.';
+    renderLibrary();
+    renderScan(null);
+    await pollLatestScan();
+    setInterval(pollLatestScan, 1500);
+  } catch {
+    // GitHub Pages has no bridge; the existing browser-only library still works.
   }
 }
 
@@ -297,7 +373,11 @@ function showSearch() {
   document.querySelector('#detail-stage').hidden = true;
 }
 
-function openAdd() {
+function openAdd(uid = null) {
+  state.pendingUid = uid;
+  const enrollment = document.querySelector('#tag-enrollment');
+  enrollment.hidden = !uid;
+  enrollment.textContent = uid ? `Adding a CD for scanned tag ${uid}` : '';
   searchForm.reset();
   results.replaceChildren();
   setStatus('');
@@ -448,7 +528,7 @@ function showDetails(cd, mode) {
   document.querySelector('#save-cd').disabled = alreadySaved;
 }
 
-document.querySelector('#add-cd').addEventListener('click', openAdd);
+document.querySelector('#add-cd').addEventListener('click', () => openAdd());
 document.querySelector('#grid-view').addEventListener('click', () => setView('grid'));
 document.querySelector('#stack-view-button').addEventListener('click', () => setView('stack'));
 document.querySelector('#stack-motion').addEventListener('click', () => {
@@ -501,6 +581,7 @@ stackView.addEventListener('keydown', event => {
   }
 });
 document.querySelector('#close-dialog').addEventListener('click', () => dialog.close());
+dialog.addEventListener('close', () => { state.pendingUid = null; });
 document.querySelector('#back-to-results').addEventListener('click', showSearch);
 searchForm.addEventListener('submit', async event => {
   event.preventDefault();
@@ -523,28 +604,58 @@ searchForm.addEventListener('submit', async event => {
     button.disabled = false;
   }
 });
-document.querySelector('#save-cd').addEventListener('click', () => {
+document.querySelector('#save-cd').addEventListener('click', async event => {
   const cd = state.selected;
   if (!cd || state.cds.some(item => item.id === cd.id)) return;
-  state.cds.unshift(cd);
-  if (!saveCds()) {
-    state.cds.shift();
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    if (state.bridge) {
+      const path = state.pendingUid ? '/api/enroll' : '/api/cds';
+      await bridgeRequest(path, { method: 'POST', body: JSON.stringify({ cd, uid: state.pendingUid }) });
+    }
+  } catch (error) {
+    alert(error.message);
+    button.disabled = false;
     return;
   }
+  state.cds.unshift(cd);
+  if (!state.bridge && !saveCds()) {
+    state.cds.shift();
+    button.disabled = false;
+    return;
+  }
+  if (state.bridge && state.pendingUid && state.currentScan?.uid === state.pendingUid) {
+    renderScan({ ...state.currentScan, cd });
+  }
+  state.pendingUid = null;
   state.activeIndex = 0;
   renderLibrary();
   dialog.close();
 });
-document.querySelector('#remove-cd').addEventListener('click', () => {
+document.querySelector('#remove-cd').addEventListener('click', async () => {
   const cd = state.selected;
   if (!cd || !confirm(`Remove ${cd.album} from your library?`)) return;
+  if (state.bridge) {
+    try {
+      await bridgeRequest(`/api/cds/${encodeURIComponent(cd.id)}`, { method: 'DELETE' });
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+  }
   const original = state.cds;
   state.cds = state.cds.filter(item => item.id !== cd.id);
-  if (!saveCds()) {
+  if (!state.bridge && !saveCds()) {
     state.cds = original;
     return;
   }
   renderLibrary();
   dialog.close();
+  if (state.bridge) {
+    state.lastScanId = 0;
+    void pollLatestScan();
+  }
 });
 renderLibrary();
+void initBridge();
