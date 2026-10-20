@@ -22,6 +22,7 @@ function setAuthMode(signUp) {
 }
 
 function renderAuthUser(user) {
+  window.cdLibraryAuth.user = user;
   document.querySelector('#auth-open').hidden = Boolean(user);
   document.querySelector('#auth-sign-out').hidden = !user;
   const name = document.querySelector('#auth-user');
@@ -29,6 +30,7 @@ function renderAuthUser(user) {
   name.textContent = user?.email || '';
   document.querySelector('#auth-storage-note').hidden = !user;
   if (user && authDialog.open) authDialog.close();
+  window.dispatchEvent(new Event('cd-library-auth-change'));
 }
 
 if (authConfig?.url && authConfig?.publishableKey) {
@@ -38,6 +40,7 @@ if (authConfig?.url && authConfig?.publishableKey) {
     document.querySelector('#auth-open').textContent = 'Sign-in unavailable';
   } else {
     const authClient = window.supabase.createClient(authConfig.url, authConfig.publishableKey);
+    window.cdLibraryAuth = { client: authClient, user: null };
     authClient.auth.onAuthStateChange((_event, session) => {
       renderAuthUser(session?.user || null);
     });

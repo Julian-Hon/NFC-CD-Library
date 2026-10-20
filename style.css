@@ -155,6 +155,9 @@ button:focus-visible, input:focus-visible, .album-card:focus-visible {
   font-weight: 700;
 }
 .view-switch button[aria-pressed="true"] { color: var(--accent); background: white; box-shadow: 0 1px 5px #20242a17; }
+.library-source { display: flex; align-items: center; gap: 14px; margin: -10px 0 25px; flex-wrap: wrap; }
+.library-source p { margin: 0; color: var(--muted); font-size: .82rem; }
+.library-source p.error { color: #ae2837; }
 
 .primary-button {
   border: 0;

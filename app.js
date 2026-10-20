@@ -12,7 +12,8 @@ const grid = document.querySelector('#album-grid');
 const stackView = document.querySelector('#stack-view');
 const stack = document.querySelector('#cd-stack');
 const stackPeek = document.querySelector('#stack-peek');
-const state = { cds: loadCds(), selected: null, mode: 'new', view: loadView(), animateStack: loadMotion(), activeIndex: 0, lastRequestAt: 0, transitioning: false, bridge: false, pendingUid: null, lastScanId: 0, currentScan: null };
+const localCds = loadCds();
+const state = { cds: localCds, localCds, cloudCds: [], source: 'local', accountUserId: null, cloudRequest: 0, selected: null, mode: 'new', view: loadView(), animateStack: loadMotion(), activeIndex: 0, lastRequestAt: 0, transitioning: false, bridge: false, pendingUid: null, lastScanId: 0, currentScan: null };
 const requestCache = new Map();
 let requestQueue = Promise.resolve();
 let stackDrag = null;
@@ -62,11 +63,81 @@ function setView(view) {
 
 function saveCds() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.cds));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.localCds));
     return true;
   } catch {
     alert('Could not save this CD in your browser. Check that browser storage is enabled.');
     return false;
+  }
+}
+
+function setSourceStatus(message, isError = false) {
+  const element = document.querySelector('#source-status');
+  element.textContent = message;
+  element.classList.toggle('error', isError);
+}
+
+function showSource(source) {
+  if (source === 'cloud' && !window.cdLibraryAuth?.user) return;
+  if (dialog.open) dialog.close();
+  state.source = source;
+  state.cds = source === 'cloud' ? state.cloudCds : state.localCds;
+  state.activeIndex = 0;
+  state.transitioning = false;
+  hideStackPeek();
+  document.querySelector('#account-library').setAttribute('aria-pressed', String(source === 'cloud'));
+  document.querySelector('#local-library').setAttribute('aria-pressed', String(source === 'local'));
+  document.querySelector('#scan-panel').hidden = source !== 'local' || !state.bridge;
+  document.querySelector('#add-cd').textContent = source === 'local' && window.cdLibraryAuth?.user ? '+ Add local CD' : '+ Add CD';
+  document.querySelector('.storage-note').textContent = source === 'cloud'
+    ? 'CDs added here are saved to your account and appear when you sign in on another browser.'
+    : state.bridge
+      ? 'With the local NFC bridge running, CDs and tag links are saved on this computer.'
+      : 'Saved CDs stay in this browser on this site. Libraries on other sites or devices are separate.';
+  setSourceStatus(source === 'local' ? (state.bridge ? 'NFC scans appear in this local library.' : 'Saved on this browser only.') : '');
+  renderLibrary();
+}
+
+async function loadAccountLibrary() {
+  const auth = window.cdLibraryAuth;
+  if (!auth?.user) return;
+  const userId = auth.user.id;
+  const request = ++state.cloudRequest;
+  showSource('cloud');
+  setSourceStatus('Loading your account library…');
+  document.querySelector('#add-cd').disabled = true;
+  try {
+    const { data, error } = await auth.client.from('cds').select('payload').order('created_at', { ascending: false });
+    if (error) throw error;
+    if (request !== state.cloudRequest || window.cdLibraryAuth?.user?.id !== userId) return;
+    state.cloudCds = data.map(row => row.payload);
+    if (state.source === 'cloud') {
+      state.cds = state.cloudCds;
+      renderLibrary();
+      setSourceStatus('');
+    }
+  } catch (error) {
+    if (request === state.cloudRequest && state.source === 'cloud') {
+      setSourceStatus(`Could not load account library: ${error.message}`, true);
+    }
+  } finally {
+    if (request === state.cloudRequest) document.querySelector('#add-cd').disabled = false;
+  }
+}
+
+function onAuthChange() {
+  const user = window.cdLibraryAuth?.user;
+  document.querySelector('#library-source').hidden = !user;
+  if (!user) {
+    state.accountUserId = null;
+    state.cloudRequest++;
+    state.cloudCds = [];
+    document.querySelector('#add-cd').disabled = false;
+    showSource('local');
+  } else if (state.accountUserId !== user.id) {
+    state.accountUserId = user.id;
+    state.cloudCds = [];
+    void loadAccountLibrary();
   }
 }
 
@@ -94,12 +165,12 @@ function renderScan(scan) {
     title.textContent = scan.cd.album;
     description.textContent = `${scan.cd.artist} · Tag ${scan.uid}`;
     action.textContent = 'View CD';
-    action.onclick = () => showDetails(scan.cd, 'saved');
+    action.onclick = () => { if (state.source === 'local') showDetails(scan.cd, 'saved'); };
   } else {
     title.textContent = 'New tag detected';
     description.textContent = `Tag ${scan.uid} is ready for a CD.`;
     action.textContent = 'Add this CD';
-    action.onclick = () => openAdd(scan.uid);
+    action.onclick = () => { if (state.source === 'local') openAdd(scan.uid); };
   }
 }
 
@@ -121,7 +192,7 @@ async function pollLatestScan() {
     state.lastScanId = scan.id;
     renderScan(scan);
     const recent = Date.now() - Date.parse(scan.scannedAt) < 30_000;
-    if (!scan.cd && (recent || !firstScan) && !dialog.open) openAdd(scan.uid);
+    if (state.source === 'local' && !scan.cd && (recent || !firstScan) && !dialog.open) openAdd(scan.uid);
   } catch {
     document.querySelector('#scan-title').textContent = 'Reader connection lost';
     document.querySelector('#scan-description').textContent = 'Restart the local NFC bridge to receive scans.';
@@ -134,10 +205,14 @@ async function initBridge() {
     const { cds } = await bridgeRequest('/api/library');
     if (!Array.isArray(cds)) return;
     state.bridge = true;
-    state.cds = cds;
-    document.querySelector('#scan-panel').hidden = false;
-    document.querySelector('.storage-note').textContent = 'With the local NFC bridge running, CDs and tag links are saved on this computer.';
-    renderLibrary();
+    state.localCds = cds;
+    if (state.source === 'local') {
+      state.cds = state.localCds;
+      document.querySelector('#scan-panel').hidden = false;
+      document.querySelector('.storage-note').textContent = 'With the local NFC bridge running, CDs and tag links are saved on this computer.';
+      setSourceStatus('NFC scans appear in this local library.');
+      renderLibrary();
+    }
     renderScan(null);
     await pollLatestScan();
     setInterval(pollLatestScan, 1500);
@@ -529,6 +604,12 @@ function showDetails(cd, mode) {
 }
 
 document.querySelector('#add-cd').addEventListener('click', () => openAdd());
+document.querySelector('#account-library').addEventListener('click', () => {
+  showSource('cloud');
+  void loadAccountLibrary();
+});
+document.querySelector('#local-library').addEventListener('click', () => showSource('local'));
+window.addEventListener('cd-library-auth-change', onAuthChange);
 document.querySelector('#grid-view').addEventListener('click', () => setView('grid'));
 document.querySelector('#stack-view-button').addEventListener('click', () => setView('stack'));
 document.querySelector('#stack-motion').addEventListener('click', () => {
@@ -609,8 +690,14 @@ document.querySelector('#save-cd').addEventListener('click', async event => {
   if (!cd || state.cds.some(item => item.id === cd.id)) return;
   const button = event.currentTarget;
   button.disabled = true;
+  const source = state.source;
+  const userId = window.cdLibraryAuth?.user?.id;
   try {
-    if (state.bridge) {
+    if (source === 'cloud') {
+      if (!userId) throw new Error('Sign in to save this CD to your account.');
+      const { error } = await window.cdLibraryAuth.client.from('cds').insert({ id: cd.id, payload: cd });
+      if (error) throw error;
+    } else if (state.bridge) {
       const path = state.pendingUid ? '/api/enroll' : '/api/cds';
       await bridgeRequest(path, { method: 'POST', body: JSON.stringify({ cd, uid: state.pendingUid }) });
     }
@@ -619,43 +706,64 @@ document.querySelector('#save-cd').addEventListener('click', async event => {
     button.disabled = false;
     return;
   }
-  state.cds.unshift(cd);
-  if (!state.bridge && !saveCds()) {
-    state.cds.shift();
-    button.disabled = false;
-    return;
-  }
-  if (state.bridge && state.pendingUid && state.currentScan?.uid === state.pendingUid) {
-    renderScan({ ...state.currentScan, cd });
+  if (source === 'cloud') {
+    if (window.cdLibraryAuth?.user?.id === userId) state.cloudCds.unshift(cd);
+  } else {
+    state.localCds.unshift(cd);
+    if (!state.bridge && !saveCds()) {
+      state.localCds.shift();
+      button.disabled = false;
+      return;
+    }
+    if (state.bridge && state.pendingUid && state.currentScan?.uid === state.pendingUid) {
+      renderScan({ ...state.currentScan, cd });
+    }
   }
   state.pendingUid = null;
   state.activeIndex = 0;
-  renderLibrary();
+  if (state.source === source) {
+    state.cds = source === 'cloud' ? state.cloudCds : state.localCds;
+    renderLibrary();
+  }
   dialog.close();
 });
 document.querySelector('#remove-cd').addEventListener('click', async () => {
   const cd = state.selected;
   if (!cd || !confirm(`Remove ${cd.album} from your library?`)) return;
-  if (state.bridge) {
-    try {
+  const source = state.source;
+  const userId = window.cdLibraryAuth?.user?.id;
+  try {
+    if (source === 'cloud') {
+      if (!userId) throw new Error('Sign in to remove this CD from your account.');
+      const { error } = await window.cdLibraryAuth.client.from('cds').delete().eq('id', cd.id);
+      if (error) throw error;
+    } else if (state.bridge) {
       await bridgeRequest(`/api/cds/${encodeURIComponent(cd.id)}`, { method: 'DELETE' });
-    } catch (error) {
-      alert(error.message);
+    }
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
+  if (source === 'cloud') {
+    if (window.cdLibraryAuth?.user?.id === userId) state.cloudCds = state.cloudCds.filter(item => item.id !== cd.id);
+  } else {
+    const original = state.localCds;
+    state.localCds = state.localCds.filter(item => item.id !== cd.id);
+    if (!state.bridge && !saveCds()) {
+      state.localCds = original;
       return;
     }
   }
-  const original = state.cds;
-  state.cds = state.cds.filter(item => item.id !== cd.id);
-  if (!state.bridge && !saveCds()) {
-    state.cds = original;
-    return;
+  if (state.source === source) {
+    state.cds = source === 'cloud' ? state.cloudCds : state.localCds;
+    renderLibrary();
   }
-  renderLibrary();
   dialog.close();
-  if (state.bridge) {
+  if (source === 'local' && state.bridge) {
     state.lastScanId = 0;
     void pollLatestScan();
   }
 });
 renderLibrary();
+onAuthChange();
 void initBridge();
