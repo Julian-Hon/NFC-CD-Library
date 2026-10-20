@@ -28,7 +28,8 @@ function renderAuthUser(user) {
   const name = document.querySelector('#auth-user');
   name.hidden = !user;
   name.textContent = user?.email || '';
-  document.querySelector('#auth-storage-note').hidden = !user;
+  document.querySelector('#auth-gate').hidden = Boolean(user);
+  document.querySelector('main.library').hidden = !user;
   if (user && authDialog.open) authDialog.close();
   window.dispatchEvent(new Event('cd-library-auth-change'));
 }
@@ -38,6 +39,8 @@ if (authConfig?.url && authConfig?.publishableKey) {
   if (!window.supabase?.createClient) {
     document.querySelector('#auth-open').disabled = true;
     document.querySelector('#auth-open').textContent = 'Sign-in unavailable';
+    document.querySelector('#gate-sign-in').disabled = true;
+    document.querySelector('#gate-sign-in').textContent = 'Sign-in unavailable';
   } else {
     const authClient = window.supabase.createClient(authConfig.url, authConfig.publishableKey);
     window.cdLibraryAuth = { client: authClient, user: null };
@@ -45,11 +48,13 @@ if (authConfig?.url && authConfig?.publishableKey) {
       renderAuthUser(session?.user || null);
     });
 
-    document.querySelector('#auth-open').addEventListener('click', () => {
+    function openAuth() {
       setAuthMode(false);
       authDialog.showModal();
       document.querySelector('#auth-email').focus();
-    });
+    }
+    document.querySelector('#auth-open').addEventListener('click', openAuth);
+    document.querySelector('#gate-sign-in').addEventListener('click', openAuth);
     document.querySelector('#auth-close').addEventListener('click', () => authDialog.close());
     authToggle.addEventListener('click', () => setAuthMode(!signingUp));
     document.querySelector('#auth-sign-out').addEventListener('click', async event => {
@@ -84,4 +89,7 @@ if (authConfig?.url && authConfig?.publishableKey) {
       }
     });
   }
+} else {
+  document.querySelector('#gate-sign-in').disabled = true;
+  document.querySelector('#gate-sign-in').textContent = 'Sign-in unavailable';
 }

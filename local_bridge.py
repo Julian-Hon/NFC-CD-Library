@@ -74,14 +74,14 @@ def validate_cd(cd):
     return cd
 
 
-def save_cd(cd, uid=None):
+def save_cd(cd, uid=None, replace_link=False):
     cd = validate_cd(cd)
     if uid is not None:
         uid = normalize_uid(uid)
     with database() as connection:
         if uid:
             linked = connection.execute("SELECT cd_id FROM tag_links WHERE uid = ?", (uid,)).fetchone()
-            if linked and linked["cd_id"] != cd["id"]:
+            if linked and linked["cd_id"] != cd["id"] and not replace_link:
                 raise ValueError("This tag is already linked to another CD")
         connection.execute(
             "INSERT INTO cds (id, payload) VALUES (?, ?) "
@@ -90,7 +90,8 @@ def save_cd(cd, uid=None):
         )
         if uid:
             connection.execute(
-                "INSERT OR IGNORE INTO tag_links (uid, cd_id) VALUES (?, ?)",
+                "INSERT INTO tag_links (uid, cd_id) VALUES (?, ?) "
+                "ON CONFLICT(uid) DO UPDATE SET cd_id = excluded.cd_id",
                 (uid, cd["id"]),
             )
     return cd
@@ -313,7 +314,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/enroll":
                 if not data.get("uid"):
                     raise ValueError("A scanned tag UID is required")
-                self.send_json(200, {"cd": save_cd(data.get("cd"), data.get("uid"))})
+                self.send_json(200, {"cd": save_cd(data.get("cd"), data.get("uid"), data.get("replace") is True)})
             elif path == "/api/scans":
                 # Local-only test endpoint; useful before a tag is available.
                 record_scan(data.get("uid"))

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f7f5">
   <meta name="description" content="Digital CD Library — catalog your physical CD collection.">
   <title>Digital CD Library</title>
-  <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
   <div class="page">
@@ -19,7 +19,14 @@
       </div>
     </header>
 
-    <main class="library" aria-labelledby="library-title">
+    <section id="auth-gate" class="auth-gate" aria-labelledby="gate-title">
+      <div class="empty-icon" aria-hidden="true">◎</div>
+      <h1 id="gate-title">Your CD library starts here.</h1>
+      <p>Sign in to see your collection and add CDs.</p>
+      <button id="gate-sign-in" class="primary-button" type="button">Sign in or create account</button>
+    </section>
+
+    <main class="library" aria-labelledby="library-title" hidden>
       <div class="section-heading">
         <div><h1 id="library-title">My library<span class="period">.</span></h1><span id="cd-count" class="count">0 CDs</span></div>
         <div class="library-actions">
@@ -30,13 +37,7 @@
           <button id="add-cd" class="primary-button" type="button">+ Add CD</button>
         </div>
       </div>
-      <div id="library-source" class="library-source" hidden>
-        <div class="view-switch" role="group" aria-label="Library storage">
-          <button id="account-library" type="button" aria-pressed="false">Account library</button>
-          <button id="local-library" type="button" aria-pressed="true">Local library</button>
-        </div>
-        <p id="source-status" role="status" aria-live="polite"></p>
-      </div>
+      <p id="library-status" class="library-status" role="status" aria-live="polite"></p>
       <section id="scan-panel" class="scan-panel" aria-label="NFC scanner" hidden>
         <div class="scan-indicator" aria-hidden="true">◉</div>
         <div class="scan-copy">
@@ -73,8 +74,7 @@
         <h2 id="empty-title">No CDs yet.</h2>
         <p id="empty-description">Add an album to start your library, then explore it in Grid or Stack view.</p>
       </div>
-      <p class="storage-note">Saved CDs stay in this browser on this site. Libraries on other sites or devices are separate.</p>
-      <p id="auth-storage-note" class="storage-note" hidden>Your account library syncs across browsers. Existing CDs and NFC scans are available under Local library.</p>
+      <p class="storage-note">Your CDs are saved to your account and appear when you sign in on another browser.</p>
     </main>
   </div>
 
@@ -110,7 +110,7 @@
   </dialog>
   <script src="supabase-config.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-  <script src="auth.js?v=2" defer></script>
-  <script src="app.js?v=7" defer></script>
+  <script src="auth.js?v=3" defer></script>
+  <script src="app.js?v=8" defer></script>
 </body>
 </html>

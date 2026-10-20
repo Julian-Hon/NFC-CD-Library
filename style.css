@@ -155,9 +155,13 @@ button:focus-visible, input:focus-visible, .album-card:focus-visible {
   font-weight: 700;
 }
 .view-switch button[aria-pressed="true"] { color: var(--accent); background: white; box-shadow: 0 1px 5px #20242a17; }
-.library-source { display: flex; align-items: center; gap: 14px; margin: -10px 0 25px; flex-wrap: wrap; }
-.library-source p { margin: 0; color: var(--muted); font-size: .82rem; }
-.library-source p.error { color: #ae2837; }
+.auth-gate { min-height: calc(100vh - 86px); display: grid; align-content: center; justify-items: center; gap: 16px; padding: 40px 24px; text-align: center; }
+.auth-gate .empty-icon { margin: 0; }
+.auth-gate h1 { font-size: clamp(2rem, 4vw, 3.4rem); letter-spacing: -.05em; }
+.auth-gate p { margin: 0 0 8px; color: var(--muted); }
+.library-status { margin: -12px 0 20px; color: var(--muted); font-size: .82rem; }
+.library-status:empty { display: none; }
+.library-status.error { color: #ae2837; }
 
 .primary-button {
   border: 0;
