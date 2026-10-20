@@ -28,7 +28,7 @@ Select **Add CD**, enter an album and artist, choose the matching CD edition, re
 
 The GitHub Pages library uses browser local storage. It stays on the same browser and origin, with no account or sync yet. A local USB NFC bridge is available below for the first scan-to-web workflow.
 
-Once you have saved CDs, switch between **Grid** and **Stack** views. Your view choice is saved in this browser and restored after refresh. Stack view shows your albums as a pile of clear jewel cases. Hover or focus on a case to preview its album. Drag the top case left or right, select a case underneath, or use the arrow buttons and left/right arrow keys to browse. The front case slides out and returns underneath as the next CD comes forward. Animation is on by default and can be turned off with the button above the stack. Select the top case or **View CD details** to open it.
+Once you have saved CDs, switch between **Grid** and **Stack** views. Your view choice is saved in this browser and restored after refresh. Stack view fills the library area with a 3D pile of jewel cases rendered in the browser with [Three.js](https://threejs.org/). Hover or focus on a spine to preview its cover; click it or select **View CD details** to open the album. The arrow buttons and Up/Down keys move through the pile. On a touch screen, tap once to preview and again to open. The animation button controls the slide-out motion, and reduced-motion system settings are respected. If WebGL or the Three.js module is unavailable, the readable CSS stack remains available.
 
 ## Standalone Listening sketch
 

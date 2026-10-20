@@ -286,7 +286,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         names = {
             "/": "index.html", "/index.html": "index.html",
-            "/app.js": "app.js", "/auth.js": "auth.js",
+            "/app.js": "app.js", "/stack-3d.js": "stack-3d.js", "/auth.js": "auth.js",
             "/supabase-config.js": "supabase-config.js", "/style.css": "style.css",
         }
         filename = names.get(path)

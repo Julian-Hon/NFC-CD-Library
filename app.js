@@ -32,6 +32,7 @@ function loadMotion() {
 
 function updateStackMotion() {
   stackView.classList.toggle('motion-off', !state.animateStack);
+  window.CDStack3D?.setMotion(state.animateStack);
   const button = document.querySelector('#stack-motion');
   button.setAttribute('aria-pressed', String(state.animateStack));
   button.textContent = state.animateStack ? 'Animation on' : 'Animation off';
@@ -234,6 +235,8 @@ function renderLibrary() {
     : 'Add an album to start your library, then explore it in Grid or Stack view.';
   grid.hidden = state.cds.length === 0 || state.view !== 'grid';
   stackView.hidden = state.cds.length === 0 || state.view !== 'stack';
+  document.body.classList.toggle('stack-active', !stackView.hidden);
+  window.CDStack3D?.setVisible(!stackView.hidden);
   document.querySelector('#grid-view').setAttribute('aria-pressed', state.view === 'grid');
   document.querySelector('#stack-view-button').setAttribute('aria-pressed', state.view === 'stack');
   grid.replaceChildren();
@@ -264,6 +267,7 @@ function selectStack(index, focusCase = false) {
   const previewCover = document.querySelector('#stack-preview-cover');
   const coverChanged = state.activeIndex !== index || !previewCover.childElementCount;
   state.activeIndex = index;
+  window.CDStack3D?.select(index);
   for (const caseButton of stack.querySelectorAll('.stack-case')) {
     caseButton.setAttribute('aria-pressed', String(Number(caseButton.dataset.index) === index));
   }
@@ -284,7 +288,10 @@ function selectStack(index, focusCase = false) {
 function renderStack() {
   stack.replaceChildren();
   document.querySelector('#stack-preview-cover').replaceChildren();
-  if (!state.cds.length) return;
+  if (!state.cds.length) {
+    window.CDStack3D?.setAlbums([]);
+    return;
+  }
   state.activeIndex = Math.min(state.activeIndex, state.cds.length - 1);
   const offsets = [0, -13, 9, -7, 16, -11, 5, -3, 12, -15];
   const tilts = [-0.3, 0.2, -0.2, 0.35, -0.15, 0.1, -0.3, 0.25, -0.1, 0.15];
@@ -325,6 +332,7 @@ function renderStack() {
     });
     stack.append(caseButton);
   }
+  window.CDStack3D?.setAlbums(state.cds);
   selectStack(state.activeIndex);
 }
 
@@ -502,6 +510,16 @@ function showDetails(cd, mode) {
 }
 
 document.querySelector('#add-cd').addEventListener('click', () => openAdd());
+window.addEventListener('cd-stack-3d-ready', () => {
+  const viewer = window.CDStack3D;
+  viewer.onSelect = index => selectStack(index);
+  viewer.onOpen = index => {
+    if (state.cds[index]) showDetails(state.cds[index], 'saved');
+  };
+  viewer.setMotion(state.animateStack);
+  viewer.setVisible(!stackView.hidden);
+  if (state.view === 'stack') renderStack();
+});
 window.addEventListener('cd-library-auth-change', onAuthChange);
 document.querySelector('#grid-view').addEventListener('click', () => setView('grid'));
 document.querySelector('#stack-view-button').addEventListener('click', () => setView('stack'));

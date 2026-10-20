@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f7f5">
   <meta name="description" content="Digital CD Library — catalog your physical CD collection.">
   <title>Digital CD Library</title>
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
   <div class="page">
@@ -55,6 +55,7 @@
         </div>
         <div class="stack-layout">
           <div class="stack-stage">
+            <canvas id="stack-canvas" class="stack-canvas" aria-label="3D CD stack. Use arrow keys to select a CD and Enter to open it." tabindex="0"></canvas>
             <div id="cd-stack" class="cd-stack" aria-label="CD case spines"></div>
           </div>
           <aside class="stack-preview" aria-label="Selected CD preview" aria-live="polite">
@@ -115,6 +116,7 @@
   <script src="supabase-config.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script src="auth.js?v=3" defer></script>
-  <script src="app.js?v=10" defer></script>
+  <script src="app.js?v=11" defer></script>
+  <script type="module" src="stack-3d.js?v=1"></script>
 </body>
 </html>
