@@ -1,6 +1,16 @@
 # Digital CD Library and ESP32 Music Display
 
-An ESP32 sketch that shows the latest track from Last.fm on a TFT display, including album art.
+The `music_hub` firmware combines the Last.fm music display and NFC CD library on one ESP32. Choose a mode on its touch screen without uploading another sketch.
+
+## Combined firmware for the ESP32-2432S028R
+
+1. Copy `music_hub/secrets.h.example` to `music_hub/secrets.h` and enter your Wi-Fi name and password, Last.fm username, and Last.fm API key. Git ignores `secrets.h`.
+2. Install the ESP32 Arduino core and the ArduinoJson, TFT_eSPI, TJpg_Decoder, Adafruit PN532, Adafruit BusIO, and **XPT2046_Bitbang_Slim** libraries. Configure TFT_eSPI for this display on HSPI (`USE_HSPI_PORT`). Keep the PN532 on the SPI connector with the wiring in [Test the NFC reader](#test-the-nfc-reader).
+3. Open `music_hub/music_hub.ino` in Arduino IDE, select the ESP32 board and its port, and upload.
+4. On first boot, tap the three touch targets in order, lifting your finger between taps. Calibration is saved on the ESP32. Use **Calibrate touch** on the home screen if you need to repeat it.
+5. Tap **Listening** to see the current or most recently observed Last.fm track. Tap **HOME**, then **CD Library** to scan stickers. Keep the USB bridge running for CD lookups and cover art. The browser at `http://127.0.0.1:8317/` still handles first-time CD entry.
+
+The older `music_display` and `nfc_library` sketches remain available as independent diagnostics. The combined firmware needs Wi-Fi only in Listening mode; CD scans still travel over USB to the local bridge. If the PN532 is unavailable, the home screen and Listening mode can still run.
 
 ## Digital CD Library webpage
 
@@ -12,7 +22,7 @@ The GitHub Pages library uses browser local storage. It stays on the same browse
 
 Once you have saved CDs, switch between **Grid** and **Stack** views. Your view choice is saved in this browser and restored after refresh. Stack view shows your albums as a pile of clear jewel cases. Hover or focus on a case to preview its album. Drag the top case left or right, select a case underneath, or use the arrow buttons and left/right arrow keys to browse. The front case slides out and returns underneath as the next CD comes forward. Animation is on by default and can be turned off with the button above the stack. Select the top case or **View CD details** to open it.
 
-## Setup
+## Standalone Listening sketch
 
 1. Copy `music_display/secrets.h.example` to `music_display/secrets.h`.
 2. Enter your Wi-Fi name and password, Last.fm username, and Last.fm API key in `music_display/secrets.h`. Use an empty password (`""`) for an open Wi-Fi network.

@@ -222,6 +222,8 @@ def read_serial(port):
                 print(f"Reading NFC scans from {port}", flush=True)
                 while True:
                     line = device.readline().decode("utf-8", errors="replace")
+                    if line.startswith("NFC_MODE_READY"):
+                        last_cover_uid = None
                     if line.startswith(("Cover received ", "JPEG decode result ")):
                         print(line.strip(), flush=True)
                     match = TAG_LINE.search(line)
