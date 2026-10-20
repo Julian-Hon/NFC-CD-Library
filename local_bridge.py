@@ -109,6 +109,24 @@ def record_scan(value):
     return True
 
 
+def screen_result(uid):
+    """Return the small album summary sent back over USB to the ESP32."""
+    with database() as connection:
+        row = connection.execute("""
+            SELECT cds.payload FROM tag_links
+            JOIN cds ON cds.id = tag_links.cd_id
+            WHERE tag_links.uid = ?
+        """, (uid,)).fetchone()
+    if row is None:
+        return {"uid": uid, "cd": None}
+    cd = json.loads(row["payload"])
+    return {"uid": uid, "cd": {
+        "album": cd["album"][:100],
+        "artist": cd["artist"][:100],
+        "trackCount": len(cd["tracks"]),
+    }}
+
+
 def read_serial(port):
     reader_state["port"] = port
     try:
@@ -128,7 +146,12 @@ def read_serial(port):
                     match = TAG_LINE.search(line)
                     if match:
                         try:
-                            record_scan(match.group(1))
+                            uid = normalize_uid(match.group(1))
+                            record_scan(uid)
+                            reply = "NFC_RESULT " + json.dumps(
+                                screen_result(uid), ensure_ascii=True, separators=(",", ":")
+                            ) + "\n"
+                            device.write(reply.encode("ascii"))
                         except ValueError:
                             pass
         except serial.SerialException as error:
