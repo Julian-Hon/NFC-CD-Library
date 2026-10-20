@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f7f7f5">
   <meta name="description" content="Digital CD Library — catalog your physical CD collection.">
   <title>Digital CD Library</title>
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
   <div class="page">
@@ -50,23 +50,27 @@
       <div id="album-grid" class="album-grid" aria-live="polite"></div>
       <section id="stack-view" class="stack-view" aria-label="CD stack" hidden>
         <div class="stack-toolbar">
-          <p class="stack-hint">Slide the top case aside to sift through your CDs.</p>
+          <div><span class="stack-eyebrow">THE COLLECTION</span><h2>A stack of your CDs.</h2><p class="stack-hint"><span class="hover-hint">Hover a spine to preview its cover. Click to open the CD.</span><span class="touch-hint">Tap a spine to preview its cover, then tap again for details.</span></p></div>
           <button id="stack-motion" class="stack-motion" type="button" aria-pressed="true">Animation on</button>
         </div>
-        <div id="cd-stack" class="cd-stack">
-          <div id="stack-peek" class="stack-peek" aria-hidden="true" hidden>
-            <span id="stack-peek-position" class="stack-peek-position"></span>
-            <strong id="stack-peek-album"></strong>
-            <span id="stack-peek-artist"></span>
-            <small id="stack-peek-action"></small>
+        <div class="stack-layout">
+          <div class="stack-stage">
+            <div id="cd-stack" class="cd-stack" aria-label="CD case spines"></div>
           </div>
+          <aside class="stack-preview" aria-label="Selected CD preview" aria-live="polite">
+            <span id="stack-position" class="stack-position"></span>
+            <div id="stack-preview-cover" class="stack-preview-cover"></div>
+            <span class="stack-preview-label">SELECTED ALBUM</span>
+            <h3 id="stack-album"></h3>
+            <p id="stack-artist"></p>
+            <p id="stack-edition" class="stack-edition"></p>
+            <div class="stack-preview-actions">
+              <button id="stack-previous" class="stack-arrow" type="button" aria-label="Previous CD">←</button>
+              <button id="stack-open" class="stack-open" type="button">View CD details</button>
+              <button id="stack-next" class="stack-arrow" type="button" aria-label="Next CD">→</button>
+            </div>
+          </aside>
         </div>
-        <div class="stack-navigation">
-          <button id="stack-previous" class="stack-arrow" type="button" aria-label="Previous CD">←</button>
-          <div class="stack-current"><span id="stack-position" class="stack-position"></span><h2 id="stack-album"></h2><p id="stack-artist"></p></div>
-          <button id="stack-next" class="stack-arrow" type="button" aria-label="Next CD">→</button>
-        </div>
-        <button id="stack-open" class="stack-open" type="button">View CD details</button>
       </section>
       <div id="empty-state" class="empty-state">
         <div class="empty-icon" aria-hidden="true">◎</div>
@@ -111,6 +115,6 @@
   <script src="supabase-config.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script src="auth.js?v=3" defer></script>
-  <script src="app.js?v=9" defer></script>
+  <script src="app.js?v=10" defer></script>
 </body>
 </html>

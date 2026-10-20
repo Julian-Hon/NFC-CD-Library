@@ -10,12 +10,9 @@ const results = document.querySelector('#search-results');
 const grid = document.querySelector('#album-grid');
 const stackView = document.querySelector('#stack-view');
 const stack = document.querySelector('#cd-stack');
-const stackPeek = document.querySelector('#stack-peek');
-const state = { cds: [], accountUserId: null, cloudRequest: 0, scanBusy: false, selected: null, mode: 'new', view: loadView(), animateStack: loadMotion(), activeIndex: 0, lastRequestAt: 0, transitioning: false, bridge: false, pendingUid: null, lastScanId: 0, currentScan: null };
+const state = { cds: [], accountUserId: null, cloudRequest: 0, scanBusy: false, selected: null, mode: 'new', view: loadView(), animateStack: loadMotion(), activeIndex: 0, lastRequestAt: 0, bridge: false, pendingUid: null, lastScanId: 0, currentScan: null };
 const requestCache = new Map();
 let requestQueue = Promise.resolve();
-let stackDrag = null;
-let suppressStackClick = false;
 
 function loadView() {
   try {
@@ -244,7 +241,6 @@ function renderLibrary() {
     renderStack();
     return;
   }
-  hideStackPeek();
   for (const cd of state.cds) {
     const card = document.createElement('button');
     card.className = 'album-card';
@@ -262,153 +258,79 @@ function renderLibrary() {
   }
 }
 
-function showStackPeek(cd, caseButton) {
-  if (state.transitioning) return;
-  const position = state.cds.findIndex(item => item.id === cd.id) + 1;
-  document.querySelector('#stack-peek-position').textContent = `CD ${position} of ${state.cds.length}`;
-  document.querySelector('#stack-peek-album').textContent = cd.album;
-  document.querySelector('#stack-peek-artist').textContent = cd.artist;
-  document.querySelector('#stack-peek-action').textContent = caseButton.dataset.depth === '0'
-    ? 'Drag to browse · Click for details'
-    : 'Click to bring forward';
-  stackPeek.hidden = false;
-}
-
-function hideStackPeek() {
-  stackPeek.hidden = true;
-}
-
-function renderStack(preserveCase = null) {
-  hideStackPeek();
-  if (!state.cds.length) {
-    stack.querySelectorAll('.stack-case').forEach(caseButton => caseButton.remove());
-    return;
-  }
-  state.activeIndex = Math.min(state.activeIndex, state.cds.length - 1);
-  const active = state.cds[state.activeIndex];
-  const visibleCount = Math.min(state.cds.length, 5);
-  const visible = Array.from({ length: visibleCount }, (_, depth) => ({
-    cd: state.cds[(state.activeIndex + depth) % state.cds.length], depth
-  }));
-  const visibleIds = new Set(visible.map(({ cd }) => cd.id));
+function selectStack(index, focusCase = false) {
+  const cd = state.cds[index];
+  if (!cd) return;
+  const previewCover = document.querySelector('#stack-preview-cover');
+  const coverChanged = state.activeIndex !== index || !previewCover.childElementCount;
+  state.activeIndex = index;
   for (const caseButton of stack.querySelectorAll('.stack-case')) {
-    if (!visibleIds.has(caseButton.dataset.id) && caseButton !== preserveCase) caseButton.remove();
+    caseButton.setAttribute('aria-pressed', String(Number(caseButton.dataset.index) === index));
   }
-  const existing = new Map([...stack.querySelectorAll('.stack-case')].map(caseButton => [caseButton.dataset.id, caseButton]));
-  for (const { cd, depth } of visible) {
-    let caseButton = existing.get(cd.id);
-    if (!caseButton) {
-      caseButton = document.createElement('button');
-      caseButton.type = 'button';
-      caseButton.className = 'stack-case';
-      caseButton.dataset.id = cd.id;
-      const art = document.createElement('div');
-      art.className = 'stack-art';
-      cover(art, cd.id, cd.releaseGroupId);
-      const hinge = document.createElement('span');
-      hinge.className = 'stack-hinge';
-      hinge.setAttribute('aria-hidden', 'true');
-      caseButton.append(art, hinge);
-      caseButton.addEventListener('mouseenter', () => showStackPeek(cd, caseButton));
-      caseButton.addEventListener('mouseleave', () => {
-        if (document.activeElement !== caseButton) hideStackPeek();
-      });
-      caseButton.addEventListener('focus', () => showStackPeek(cd, caseButton));
-      caseButton.addEventListener('blur', hideStackPeek);
-      stack.append(caseButton);
-    }
-    caseButton.setAttribute('aria-label', `${depth === 0 ? 'Open' : 'Select'} ${cd.album} by ${cd.artist}`);
-    caseButton.setAttribute('aria-current', depth === 0 ? 'true' : 'false');
-    caseButton.dataset.depth = String(depth);
-    caseButton.classList.toggle('is-single', state.cds.length === 1);
-    caseButton.style.zIndex = String(10 - depth);
-    caseButton.onclick = () => {
-      if (suppressStackClick || state.transitioning) return;
-      if (depth === 0) showDetails(cd, 'saved');
-      else {
-        const nextIndex = state.cds.findIndex(item => item.id === cd.id);
-        const forward = (nextIndex - state.activeIndex + state.cds.length) % state.cds.length;
-        void transitionStackTo(nextIndex, forward <= state.cds.length / 2 ? 1 : -1);
-      }
-    };
-  }
-  document.querySelector('#stack-position').textContent = `${state.activeIndex + 1} / ${state.cds.length}`;
-  document.querySelector('#stack-album').textContent = active.album;
-  document.querySelector('#stack-artist').textContent = active.artist;
+  document.querySelector('#stack-position').textContent = `CD ${index + 1} OF ${state.cds.length}`;
+  document.querySelector('#stack-album').textContent = cd.album;
+  document.querySelector('#stack-artist').textContent = cd.artist;
+  document.querySelector('#stack-edition').textContent = [
+    cd.date?.slice(0, 4),
+    cd.media?.join(' + '),
+    `${cd.tracks.length} ${cd.tracks.length === 1 ? 'track' : 'tracks'}`
+  ].filter(Boolean).join(' · ');
+  if (coverChanged) cover(previewCover, cd.id, cd.releaseGroupId);
   document.querySelector('#stack-previous').disabled = state.cds.length < 2;
   document.querySelector('#stack-next').disabled = state.cds.length < 2;
+  if (focusCase) stack.querySelector(`[data-index="${index}"]`)?.focus({ preventScroll: true });
 }
 
-async function transitionStackTo(nextIndex, direction) {
-  if (state.transitioning || nextIndex === state.activeIndex || state.cds.length < 2) return;
-  const oldTop = stack.querySelector('.stack-case[aria-current="true"]');
-  const caseHadFocus = stack.contains(document.activeElement);
-  const animateStack = state.animateStack;
-  state.transitioning = true;
-  stackView.classList.add('is-traveling');
-  stackView.setAttribute('aria-busy', 'true');
-  hideStackPeek();
-  try {
-    if (animateStack && oldTop) {
-      const stageRect = stack.getBoundingClientRect();
-      const caseRect = oldTop.getBoundingClientRect();
-      const currentTranslate = getComputedStyle(oldTop).translate;
-      const startX = currentTranslate === 'none' ? 0 : parseFloat(currentTranslate) || 0;
-      const exitDistance = direction > 0
-        ? stageRect.right - caseRect.left + 32
-        : stageRect.left - caseRect.right - 32;
-      const exit = oldTop.animate([
-        { translate: currentTranslate === 'none' ? '0px 0px' : currentTranslate },
-        { translate: `${startX + exitDistance}px -36px` }
-      ], { duration: 950, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'forwards' });
-      await exit.finished;
-      oldTop.classList.remove('is-dragging');
-      oldTop.style.removeProperty('--drag-x');
-      oldTop.blur();
-      state.activeIndex = nextIndex;
-      renderStack(oldTop);
-      const stillVisible = [...stack.querySelectorAll('.stack-case')]
-        .filter(caseButton => caseButton !== oldTop)
-        .length < Math.min(state.cds.length, 5);
-      if (!stillVisible) {
-        oldTop.dataset.depth = '4';
-        oldTop.style.zIndex = '1';
-        oldTop.setAttribute('aria-current', 'false');
-        oldTop.setAttribute('aria-hidden', 'true');
-        oldTop.tabIndex = -1;
+function renderStack() {
+  stack.replaceChildren();
+  document.querySelector('#stack-preview-cover').replaceChildren();
+  if (!state.cds.length) return;
+  state.activeIndex = Math.min(state.activeIndex, state.cds.length - 1);
+  const offsets = [0, -13, 9, -7, 16, -11, 5, -3, 12, -15];
+  const tilts = [-0.3, 0.2, -0.2, 0.35, -0.15, 0.1, -0.3, 0.25, -0.1, 0.15];
+  for (const [index, cd] of state.cds.entries()) {
+    const caseButton = document.createElement('button');
+    caseButton.type = 'button';
+    caseButton.className = 'stack-case';
+    caseButton.dataset.index = String(index);
+    caseButton.style.setProperty('--case-offset', `${offsets[index % offsets.length]}px`);
+    caseButton.style.setProperty('--case-tilt', `${tilts[index % tilts.length]}deg`);
+    caseButton.style.setProperty('--case-order', String(index));
+    caseButton.setAttribute('aria-label', `Preview ${cd.album} by ${cd.artist}; click for details`);
+    caseButton.title = `${cd.album} — ${cd.artist}`;
+    const hinge = document.createElement('span');
+    hinge.className = 'stack-hinge';
+    hinge.setAttribute('aria-hidden', 'true');
+    const art = document.createElement('span');
+    art.className = 'stack-art';
+    cover(art, cd.id, cd.releaseGroupId);
+    const copy = document.createElement('span');
+    copy.className = 'stack-spine-copy';
+    const album = document.createElement('strong');
+    album.textContent = cd.album;
+    const artist = document.createElement('small');
+    artist.textContent = cd.artist;
+    copy.append(album, artist);
+    caseButton.append(hinge, art, copy);
+    caseButton.addEventListener('pointerenter', event => {
+      if (event.pointerType !== 'touch') selectStack(index);
+    });
+    caseButton.addEventListener('focus', () => selectStack(index));
+    caseButton.addEventListener('click', () => {
+      if (matchMedia('(hover: none)').matches && state.activeIndex !== index) {
+        selectStack(index);
+      } else {
+        showDetails(cd, 'saved');
       }
-      oldTop.classList.add('is-repositioning');
-      exit.cancel();
-      const returnRect = oldTop.getBoundingClientRect();
-      const returnDistance = direction > 0
-        ? stageRect.right - returnRect.left + 32
-        : stageRect.left - returnRect.right - 32;
-      const returning = oldTop.animate([
-        { translate: `${returnDistance}px -36px` },
-        { translate: '0px 0px' }
-      ], { duration: 1000, easing: 'cubic-bezier(.4, 0, .2, 1)', fill: 'both' });
-      await returning.finished;
-      returning.cancel();
-      oldTop.classList.remove('is-repositioning');
-      if (!stillVisible) oldTop.remove();
-    } else {
-      oldTop?.classList.remove('is-dragging');
-      oldTop?.style.removeProperty('--drag-x');
-      state.activeIndex = nextIndex;
-      renderStack();
-    }
-  } finally {
-    state.transitioning = false;
-    stackView.classList.remove('is-traveling');
-    stackView.removeAttribute('aria-busy');
-    if (caseHadFocus) stack.querySelector('.stack-case[aria-current="true"]')?.focus({ preventScroll: true });
+    });
+    stack.append(caseButton);
   }
+  selectStack(state.activeIndex);
 }
 
 function moveStack(step) {
-  if (state.cds.length < 2 || state.transitioning) return;
-  const nextIndex = (state.activeIndex + step + state.cds.length) % state.cds.length;
-  void transitionStackTo(nextIndex, step);
+  if (!state.cds.length) return;
+  selectStack((state.activeIndex + step + state.cds.length) % state.cds.length, true);
 }
 
 function setStatus(message, isError = false) {
@@ -595,41 +517,12 @@ document.querySelector('#stack-motion').addEventListener('click', () => {
 document.querySelector('#stack-previous').addEventListener('click', () => moveStack(-1));
 document.querySelector('#stack-next').addEventListener('click', () => moveStack(1));
 document.querySelector('#stack-open').addEventListener('click', () => {
-  if (!state.transitioning) showDetails(state.cds[state.activeIndex], 'saved');
+  if (state.cds[state.activeIndex]) showDetails(state.cds[state.activeIndex], 'saved');
 });
-stack.addEventListener('pointerdown', event => {
-  const caseButton = event.target.closest('.stack-case[aria-current="true"]');
-  if (!caseButton || state.cds.length < 2 || state.transitioning || event.button !== 0) return;
-  event.preventDefault();
-  stackDrag = { button: caseButton, pointerId: event.pointerId, startX: event.clientX };
-  caseButton.setPointerCapture(event.pointerId);
-  caseButton.classList.add('is-dragging');
-});
-stack.addEventListener('pointermove', event => {
-  if (!stackDrag || event.pointerId !== stackDrag.pointerId) return;
-  const distance = event.clientX - stackDrag.startX;
-  stackDrag.button.style.setProperty('--drag-x', `${distance}px`);
-});
-function endStackDrag(event) {
-  if (!stackDrag || event.pointerId !== stackDrag.pointerId) return;
-  const { button, startX } = stackDrag;
-  const distance = event.clientX - startX;
-  stackDrag = null;
-  if (event.type !== 'pointercancel' && Math.abs(distance) > 45) {
-    suppressStackClick = true;
-    moveStack(distance > 0 ? 1 : -1);
-    setTimeout(() => { suppressStackClick = false; }, 0);
-  } else {
-    button.classList.remove('is-dragging');
-    button.style.removeProperty('--drag-x');
-  }
-}
-stack.addEventListener('pointerup', endStackDrag);
-stack.addEventListener('pointercancel', endStackDrag);
-stackView.addEventListener('keydown', event => {
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+stack.addEventListener('keydown', event => {
+  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
     event.preventDefault();
-    moveStack(event.key === 'ArrowLeft' ? -1 : 1);
+    moveStack(event.key === 'ArrowUp' ? -1 : 1);
   }
 });
 document.querySelector('#close-dialog').addEventListener('click', () => dialog.close());
