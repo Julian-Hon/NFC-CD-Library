@@ -8,6 +8,8 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const WIDTH = 5.68;
 const DEPTH = 4.96;
 const HEIGHT = .416;
+const COVER_SIZE = 4.72;
+const COVER_X = .3;
 const SPACING = HEIGHT + .012;
 const offsets = [-.18, .13, -.09, .22, -.14, .08, -.2, .16];
 const scene = new THREE.Scene();
@@ -110,13 +112,40 @@ function fitText(context, value, maximum, initialSize, minimumSize = 28) {
   return size;
 }
 
-function spineTexture(cd) {
+function commonCoverColor(image) {
+  try {
+    const sample = document.createElement('canvas');
+    sample.width = sample.height = 48;
+    const context = sample.getContext('2d', { willReadFrequently: true });
+    context.drawImage(image, 0, 0, 48, 48);
+    const pixels = context.getImageData(0, 0, 48, 48).data;
+    const colors = new Map();
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 3] < 200) continue;
+      const key = `${pixels[i] >> 5},${pixels[i + 1] >> 5},${pixels[i + 2] >> 5}`;
+      const bin = colors.get(key) || { count: 0, channels: [0, 0, 0] };
+      bin.count++;
+      for (let channel = 0; channel < 3; channel++) bin.channels[channel] += pixels[i + channel];
+      colors.set(key, bin);
+    }
+    const common = [...colors.values()].sort((a, b) => b.count - a.count)[0];
+    if (common) return common.channels.map(sum => Math.round(sum / common.count));
+  } catch { /* Keep the placeholder color if the cover host blocks pixel reads. */ }
+  return null;
+}
+
+function spineTexture(cd, color = null) {
   const hash = [...`${cd.artist}${cd.album}`].reduce((sum, letter) => (sum * 31 + letter.charCodeAt(0)) >>> 0, 7);
+  const [red, green, blue] = color || [[166, 108, 91], [121, 115, 96], [89, 109, 114], [139, 109, 123]][hash % 4];
+  const luminance = [red, green, blue]
+    .map(value => value / 255)
+    .map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+    .reduce((sum, value, channel) => sum + value * [.2126, .7152, .0722][channel], 0);
   return canvasTexture((context, width, height) => {
-    context.fillStyle = '#e8e2d7';
+    context.fillStyle = `rgb(${red}, ${green}, ${blue})`;
     context.fillRect(0, 0, width, height);
     context.textBaseline = 'middle';
-    context.fillStyle = '#272622';
+    context.fillStyle = luminance > .179 ? '#1b1b1a' : '#faf7f1';
     const artistWidth = Math.min(700, Math.max(330, cd.artist.length * 35));
     fitText(context, cd.artist, artistWidth - 65, 64, 32);
     context.fillText(cd.artist, 48, height / 2, artistWidth - 65);
@@ -179,6 +208,12 @@ function addCover(entry, cd) {
       entry.coverMaterial.map.dispose();
       entry.coverMaterial.map = texture;
       entry.coverMaterial.needsUpdate = true;
+      const color = commonCoverColor(texture.image);
+      if (color) {
+        entry.spineMaterial.map.dispose();
+        entry.spineMaterial.map = spineTexture(cd, color);
+        entry.spineMaterial.needsUpdate = true;
+      }
       requestDraw();
     }, undefined, () => tryPath(index + 1));
   }
@@ -201,14 +236,14 @@ function makeCase(cd, index, total) {
   paper.receiveShadow = true;
   group.add(paper);
   const coverMaterial = new THREE.MeshStandardMaterial({ map: placeholderCover(cd, index), roughness: .7 });
-  const cover = new THREE.Mesh(new THREE.PlaneGeometry(4.72, 4.72), coverMaterial);
+  const cover = new THREE.Mesh(new THREE.PlaneGeometry(COVER_SIZE, COVER_SIZE), coverMaterial);
   cover.rotation.x = -Math.PI / 2;
-  cover.position.set(.3, HEIGHT / 2 - .065, 0);
+  cover.position.set(COVER_X, HEIGHT / 2 - .065, 0);
   cover.castShadow = true;
   cover.receiveShadow = true;
   group.add(cover);
-  const spine = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - .34, HEIGHT - .12), new THREE.MeshStandardMaterial({ map: spineTexture(cd), roughness: .78 }));
-  spine.position.set(.07, 0, DEPTH / 2 - .06);
+  const spine = new THREE.Mesh(new THREE.PlaneGeometry(COVER_SIZE, HEIGHT - .12), new THREE.MeshStandardMaterial({ map: spineTexture(cd), roughness: .78 }));
+  spine.position.set(COVER_X, 0, DEPTH / 2 - .06);
   group.add(spine);
 
   rail(group, [WIDTH, .025, DEPTH], [0, HEIGHT / 2 - .0125, 0], railMaterial);
@@ -235,7 +270,7 @@ function makeCase(cd, index, total) {
   }
   const hit = new THREE.Mesh(new THREE.BoxGeometry(WIDTH, HEIGHT, DEPTH), new THREE.MeshBasicMaterial({ visible: false }));
   group.add(hit);
-  const entry = { group, paper: hit, coverMaterial, baseX, baseY, baseZ, alive: true, index };
+  const entry = { group, paper: hit, coverMaterial, spineMaterial: spine.material, baseX, baseY, baseZ, alive: true, index };
   addCover(entry, cd);
   return entry;
 }
@@ -291,10 +326,10 @@ function positionLabels() {
     if (!button) continue;
     entry.group.updateMatrixWorld(true);
     const corners = [
-      [-WIDTH / 2 + .21, -HEIGHT / 2 + .025, DEPTH / 2 + .03],
-      [WIDTH / 2 - .08, -HEIGHT / 2 + .025, DEPTH / 2 + .03],
-      [-WIDTH / 2 + .21, HEIGHT / 2 - .025, DEPTH / 2 + .03],
-      [WIDTH / 2 - .08, HEIGHT / 2 - .025, DEPTH / 2 + .03]
+      [COVER_X - COVER_SIZE / 2, -HEIGHT / 2 + .025, DEPTH / 2 + .03],
+      [COVER_X + COVER_SIZE / 2, -HEIGHT / 2 + .025, DEPTH / 2 + .03],
+      [COVER_X - COVER_SIZE / 2, HEIGHT / 2 - .025, DEPTH / 2 + .03],
+      [COVER_X + COVER_SIZE / 2, HEIGHT / 2 - .025, DEPTH / 2 + .03]
     ].map(coords => {
       const point = entry.group.localToWorld(new THREE.Vector3(...coords));
       return project(point.x, point.y, point.z);
