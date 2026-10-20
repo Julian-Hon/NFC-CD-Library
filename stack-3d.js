@@ -12,8 +12,7 @@ const SPACING = HEIGHT + .012;
 const offsets = [-.18, .13, -.09, .22, -.14, .08, -.2, .16];
 const scene = new THREE.Scene();
 scene.background = null;
-const camera = new THREE.OrthographicCamera(-4, 4, 3, -3, .1, 100);
-camera.position.set(1.6, 3, 12);
+const camera = new THREE.PerspectiveCamera(15, 1, .1, 100);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' });
 renderer.setClearColor(0x000000, 0);
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
@@ -301,13 +300,13 @@ function resize() {
   }
   const aspect = width / height;
   const viewHeight = Math.max(7.6 / aspect, entries.length * SPACING + 1.65);
-  camera.left = -viewHeight * aspect / 2;
-  camera.right = viewHeight * aspect / 2;
-  camera.top = viewHeight / 2;
-  camera.bottom = -viewHeight / 2;
-  // Low, nearly frontal camera: the paper spines are the primary faces.
+  // Perspective makes the near spine edge longer than the far edge, as on a
+  // real jewel case. A long focal length keeps the view almost front-facing.
+  const cameraDistance = 24;
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(viewHeight / (2 * cameraDistance)));
+  camera.aspect = aspect;
   const targetY = viewHeight * .34 - .28;
-  camera.position.set(-2.7, targetY + 1.5, 15);
+  camera.position.set(-1.75, targetY + 2.4, cameraDistance);
   camera.lookAt(.12, targetY, 0);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
