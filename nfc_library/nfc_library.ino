@@ -2,6 +2,7 @@
 #include <Adafruit_PN532.h>
 #include <ArduinoJson.h>
 #include <TFT_eSPI.h>
+#include <TJpg_Decoder.h>
 
 // These pins are printed beside the SPI connector on this ESP32 display.
 constexpr uint8_t NFC_SCK = 18;
@@ -18,6 +19,16 @@ String serialLine;
 String shownUid;
 String shownSummary;
 unsigned long pendingSince = 0;
+
+constexpr int COVER_X = 30;
+constexpr int COVER_Y = 53;
+constexpr int COVER_SIZE = 160;
+
+bool tftOutput(int16_t x, int16_t y, uint16_t w, uint16_t h, uint16_t *bitmap) {
+  if (y >= tft.height()) return false;
+  tft.pushImage(x, y, w, h, bitmap);
+  return true;
+}
 
 String fitText(String value, int maxWidth) {
   if (tft.textWidth(value) <= maxWidth) return value;
@@ -46,37 +57,108 @@ void drawMessage(const char *heading, const String &line1, const String &line2) 
   tft.drawString(fitText(line2, tft.width() - 24), 12, 104);
 }
 
+void drawCaseChrome() {
+  // The pale edge, hinges, and highlights resemble a clear jewel case.
+  tft.drawRect(8, 40, 195, 186, TFT_WHITE);
+  tft.drawRect(10, 42, 191, 182, TFT_LIGHTGREY);
+  tft.drawRect(COVER_X - 2, COVER_Y - 2, COVER_SIZE + 4, COVER_SIZE + 4, TFT_WHITE);
+  tft.fillRect(12, 46, 11, 173, 0xC638);
+  tft.drawFastVLine(14, 48, 168, TFT_WHITE);
+  tft.drawFastVLine(24, 48, 168, TFT_DARKGREY);
+  tft.fillRect(12, 56, 13, 13, TFT_LIGHTGREY);
+  tft.fillRect(12, 194, 13, 13, TFT_LIGHTGREY);
+  tft.drawFastHLine(31, 48, 160, TFT_WHITE);
+  tft.drawFastVLine(196, 46, 174, TFT_WHITE);
+  tft.drawFastHLine(30, 218, 162, TFT_LIGHTGREY);
+}
+
+void drawCoverPlaceholder() {
+  tft.fillRect(COVER_X, COVER_Y, COVER_SIZE, COVER_SIZE, 0x39E7);
+  tft.fillCircle(110, 133, 53, TFT_LIGHTGREY);
+  tft.drawCircle(110, 133, 44, TFT_WHITE);
+  tft.drawCircle(110, 133, 35, TFT_DARKGREY);
+  tft.fillCircle(110, 133, 11, TFT_DARKGREY);
+  tft.fillCircle(110, 133, 4, TFT_BLACK);
+  drawCaseChrome();
+}
+
+void drawTwoLines(String value, int x, int y, int width) {
+  if (tft.textWidth(value) <= width) {
+    tft.drawString(value, x, y);
+    return;
+  }
+  int split = value.length();
+  while (split > 0 && tft.textWidth(value.substring(0, split)) > width) --split;
+  int wordBreak = value.lastIndexOf(' ', split);
+  if (wordBreak > 0) split = wordBreak;
+  tft.drawString(fitText(value.substring(0, split), width), x, y);
+  value = value.substring(split);
+  value.trim();
+  tft.drawString(fitText(value, width), x, y + 19);
+}
+
 void drawAlbum(const String &uid, const String &album,
                const String &artist, int trackCount) {
   drawFrame("DIGITAL CD LIBRARY");
+  tft.fillRect(11, 43, 195, 185, TFT_DARKGREY); // Case shadow.
+  tft.fillRect(8, 40, 195, 186, 0xBDF7);
+  drawCoverPlaceholder();
 
-  // A simple disc graphic keeps this screen useful without downloading art.
-  const int discX = 75;
-  const int discY = 125;
-  tft.fillCircle(discX, discY, 63, TFT_LIGHTGREY);
-  tft.drawCircle(discX, discY, 55, TFT_WHITE);
-  tft.drawCircle(discX, discY, 44, TFT_DARKGREY);
-  tft.fillCircle(discX, discY, 14, TFT_DARKGREY);
-  tft.fillCircle(discX, discY, 5, TFT_BLACK);
-
-  const int infoX = 153;
-  const int infoWidth = tft.width() - infoX - 12;
+  const int infoX = 212;
+  const int infoWidth = tft.width() - infoX - 8;
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.drawString("ALBUM", infoX, 61);
+  tft.drawString("ALBUM", infoX, 55);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(fitText(album, infoWidth), infoX, 84);
+  drawTwoLines(album, infoX, 77, infoWidth);
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.drawString("ARTIST", infoX, 119);
+  tft.drawString("ARTIST", infoX, 125);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.drawString(fitText(artist, infoWidth), infoX, 142);
+  drawTwoLines(artist, infoX, 147, infoWidth);
   tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.drawString(String(trackCount) + " tracks", infoX, 179);
+  tft.drawString(String(trackCount) + " tracks", infoX, 194);
 
   tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.drawString(fitText("Tag " + uid, tft.width() - 24), 12, tft.height() - 25);
+  tft.setTextFont(1);
+  tft.drawString(fitText("Tag " + uid, tft.width() - 24), 12, tft.height() - 10);
+  tft.setTextFont(2);
+}
+
+void receiveCover(const String &line) {
+  const String prefix = "NFC_COVER ";
+  int separator = line.indexOf(' ', prefix.length());
+  if (separator < 0) return;
+  String uid = line.substring(prefix.length(), separator);
+  int length = line.substring(separator + 1).toInt();
+  if (length < 1 || length > 35000) return;
+
+  uint8_t *jpeg = static_cast<uint8_t *>(malloc(length));
+  if (!jpeg) {
+    uint8_t scratch[64];
+    for (int remaining = length; remaining > 0;) {
+      size_t count = Serial.readBytes(scratch, min(remaining, 64));
+      if (!count) break;
+      remaining -= count;
+    }
+    return;
+  }
+
+  size_t received = Serial.readBytes(jpeg, length);
+  if (received == static_cast<size_t>(length) && uid == shownUid &&
+      shownSummary != "new" && shownSummary != "waiting") {
+    if (TJpgDec.drawJpg(COVER_X, COVER_Y, jpeg, length) != JDR_OK) {
+      drawCoverPlaceholder();
+    } else {
+      drawCaseChrome();
+    }
+  }
+  free(jpeg);
 }
 
 void handleBridgeLine(const String &line) {
+  if (line.startsWith("NFC_COVER ")) {
+    receiveCover(line);
+    return;
+  }
   const String prefix = "NFC_RESULT ";
   if (!line.startsWith(prefix)) return;
 
@@ -122,12 +204,16 @@ void readBridgeReplies() {
 
 void setup() {
   Serial.begin(115200);
+  Serial.setTimeout(8000);
   delay(1000);
 
   pinMode(21, OUTPUT); // Display backlight on this board.
   digitalWrite(21, HIGH);
   tft.init();
   tft.setRotation(1);
+  TJpgDec.setJpgScale(1);
+  TJpgDec.setSwapBytes(true);
+  TJpgDec.setCallback(tftOutput);
   drawMessage("DIGITAL CD LIBRARY", "Starting NFC reader...", "");
 
   SPI.begin(NFC_SCK, NFC_MISO, NFC_MOSI, NFC_CS);

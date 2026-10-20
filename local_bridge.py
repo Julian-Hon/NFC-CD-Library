@@ -5,16 +5,19 @@ Then open http://127.0.0.1:8317/ on this computer.
 """
 
 import argparse
+import io
 import json
 import re
 import socket
 import sqlite3
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parent
@@ -127,6 +130,78 @@ def screen_result(uid):
     }}
 
 
+def cover_for_uid(uid):
+    """Fetch and cache a small baseline JPEG for a linked MusicBrainz CD."""
+    with database() as connection:
+        row = connection.execute("""
+            SELECT cds.payload FROM tag_links
+            JOIN cds ON cds.id = tag_links.cd_id
+            WHERE tag_links.uid = ?
+        """, (uid,)).fetchone()
+    if row is None:
+        return None
+
+    cd = json.loads(row["payload"])
+    try:
+        release_id = str(uuid.UUID(cd["id"]))
+    except (KeyError, ValueError, TypeError):
+        return None
+
+    cover_path = DB_PATH.parent / "covers" / f"{release_id}.jpg"
+    if cover_path.exists():
+        return cover_path.read_bytes()
+
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        print("Install Pillow to show album covers: python -m pip install Pillow", flush=True)
+        return None
+
+    ids = [("release", release_id)]
+    try:
+        if cd.get("releaseGroupId"):
+            ids.append(("release-group", str(uuid.UUID(cd["releaseGroupId"]))))
+    except (ValueError, TypeError):
+        pass
+
+    for kind, identifier in ids:
+        url = f"https://coverartarchive.org/{kind}/{identifier}/front-250"
+        request = Request(url, headers={"User-Agent": "DigitalCDLibrary/0.1 (local personal project)"})
+        try:
+            with urlopen(request, timeout=12) as response:
+                source = response.read(2_000_001)
+            if len(source) > 2_000_000:
+                raise ValueError("Cover image is too large")
+            with Image.open(io.BytesIO(source)) as image:
+                square = ImageOps.fit(image.convert("RGB"), (160, 160), method=Image.Resampling.LANCZOS)
+                output = io.BytesIO()
+                square.save(output, format="JPEG", quality=75, progressive=False)
+            data = output.getvalue()
+            if len(data) > 35_000:
+                raise ValueError("Resized cover is too large")
+            cover_path.parent.mkdir(parents=True, exist_ok=True)
+            cover_path.write_bytes(data)
+            return data
+        except Exception as error:
+            print(f"Cover unavailable for {kind} {identifier}: {error}", flush=True)
+    return None
+
+
+def send_screen_update(device, uid, last_cover_uid):
+    result = screen_result(uid)
+    reply = "NFC_RESULT " + json.dumps(
+        result, ensure_ascii=True, separators=(",", ":")
+    ) + "\n"
+    device.write(reply.encode("ascii"))
+    if result["cd"] is not None and uid != last_cover_uid:
+        cover = cover_for_uid(uid)
+        if cover:
+            device.write(f"NFC_COVER {uid} {len(cover)}\n".encode("ascii"))
+            device.write(cover)
+        return uid
+    return last_cover_uid
+
+
 def read_serial(port):
     reader_state["port"] = port
     try:
@@ -138,6 +213,7 @@ def read_serial(port):
     while True:
         try:
             with serial.Serial(port, 115200, timeout=1) as device:
+                last_cover_uid = None
                 reader_state["connected"] = True
                 last_error = None
                 print(f"Reading NFC scans from {port}", flush=True)
@@ -148,10 +224,7 @@ def read_serial(port):
                         try:
                             uid = normalize_uid(match.group(1))
                             record_scan(uid)
-                            reply = "NFC_RESULT " + json.dumps(
-                                screen_result(uid), ensure_ascii=True, separators=(",", ":")
-                            ) + "\n"
-                            device.write(reply.encode("ascii"))
+                            last_cover_uid = send_screen_update(device, uid, last_cover_uid)
                         except ValueError:
                             pass
         except serial.SerialException as error:
