@@ -11,8 +11,7 @@ const HEIGHT = .416;
 const SPACING = HEIGHT + .012;
 const offsets = [-.18, .13, -.09, .22, -.14, .08, -.2, .16];
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#b6a18b');
-scene.fog = new THREE.Fog('#b6a18b', 28, 65);
+scene.background = null;
 const camera = new THREE.OrthographicCamera(-4, 4, 3, -3, .1, 100);
 camera.position.set(1.6, 3, 12);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' });
@@ -40,46 +39,24 @@ const fill = new THREE.DirectionalLight(0xe5edff, 1.2);
 fill.position.set(7, 4, -4);
 scene.add(fill);
 
-// A real room and tabletop receive the cases' light, shadows and reflections.
-const woodTexture = canvasTexture((context, width, height) => {
-  context.fillStyle = '#98704b';
-  context.fillRect(0, 0, width, height);
-  let seed = 17;
-  const random = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  for (let line = 0; line < 1800; line++) {
-    const y = random() * height;
-    context.strokeStyle = `rgba(${random() > .5 ? '52,29,15' : '221,180,126'},${.025 + random() * .11})`;
-    context.lineWidth = .4 + random() * 1.4;
-    context.beginPath();
-    context.moveTo(0, y);
-    context.bezierCurveTo(width * .3, y + random() * 12, width * .7, y - random() * 12, width, y + random() * 6);
-    context.stroke();
-  }
-});
-woodTexture.wrapS = woodTexture.wrapT = THREE.RepeatWrapping;
-woodTexture.repeat.set(3, 2);
-const table = new THREE.Mesh(
-  new THREE.BoxGeometry(24, .48, 12),
-  new THREE.MeshStandardMaterial({ map: woodTexture, color: '#b9a58e', roughness: .43, metalness: 0 })
-);
-table.position.set(0, -.24, -1);
+// A transparent receiver anchors the individual 3D cases to the photographed desk.
+const table = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), new THREE.ShadowMaterial({ color: '#241b14', opacity: .28 }));
+table.rotation.x = -Math.PI / 2;
+table.position.y = -.018;
 table.receiveShadow = true;
-table.castShadow = true;
 scene.add(table);
-const wall = new THREE.Mesh(new THREE.PlaneGeometry(90, 40), new THREE.MeshStandardMaterial({ color: '#b9a48e', roughness: 1 }));
-wall.position.set(0, 13, -11);
-wall.receiveShadow = true;
-scene.add(wall);
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({ color: '#746253', roughness: .9 }));
-floor.rotation.x = -Math.PI / 2;
-floor.position.y = -4;
-floor.receiveShadow = true;
-scene.add(floor);
-for (const x of [-9, 9]) {
-  const leg = new THREE.Mesh(new THREE.BoxGeometry(.35, 3.6, .35), new THREE.MeshStandardMaterial({ color: '#49372b', roughness: .55 }));
-  leg.position.set(x, -2.2, 4.7);
-  scene.add(leg);
-}
+const contactTexture = canvasTexture((context, width, height) => {
+  const gradient = context.createRadialGradient(width / 2, height / 2, 20, width / 2, height / 2, width / 2);
+  gradient.addColorStop(0, 'rgba(22,17,12,.40)');
+  gradient.addColorStop(.6, 'rgba(22,17,12,.17)');
+  gradient.addColorStop(1, 'rgba(22,17,12,0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, width, height);
+});
+const contact = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 6.3), new THREE.MeshBasicMaterial({ map: contactTexture, transparent: true, depthWrite: false }));
+contact.rotation.x = -Math.PI / 2;
+contact.position.set(0, -.009, .1);
+scene.add(contact);
 // Softbox reflections make clear plastic readable without tinting it blue.
 const reflectionRoom = new THREE.Scene();
 reflectionRoom.background = new THREE.Color('#a49789');
@@ -94,9 +71,9 @@ scene.environment = pmrem.fromScene(reflectionRoom, .04).texture;
 pmrem.dispose();
 reflectionRoom.traverse(object => { object.geometry?.dispose(); object.material?.dispose(); });
 const railMaterial = new THREE.MeshPhysicalMaterial({
-  color: '#ffffff', metalness: 0, roughness: .025, transmission: .98,
+  color: '#ffffff', metalness: 0, roughness: .06, transmission: 0, transparent: true, opacity: .11, depthWrite: false,
   thickness: .045, ior: 1.49, clearcoat: 1, clearcoatRoughness: .04,
-  envMapIntensity: .35
+  envMapIntensity: .65
 });
 const edgeMaterial = new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0, roughness: .08, transparent: true, opacity: .18, depthWrite: false, clearcoat: 1, envMapIntensity: .65 });
 const darkRailMaterial = new THREE.MeshStandardMaterial({ color: '#363430', roughness: .32 });
@@ -104,6 +81,8 @@ const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 const entries = [];
 let selected = 0;
+let hovered = -1;
+const mobile = matchMedia('(max-width: 760px)');
 let animate = true;
 let visible = false;
 let frame = 0;
@@ -133,20 +112,51 @@ function fitText(context, value, maximum, initialSize, minimumSize = 28) {
   return size;
 }
 
-function spineTexture(cd) {
+function spineTexture(cd, index = 0, artwork = null) {
+  const hash = [...`${cd.artist}${cd.album}`].reduce((sum, letter) => (sum * 31 + letter.charCodeAt(0)) >>> 0, 7);
+  let rgb = [[211, 205, 188], [55, 59, 66], [73, 102, 112], [158, 129, 111]][hash % 4];
+  if (artwork) {
+    try {
+      const sampler = document.createElement('canvas'); sampler.width = sampler.height = 8;
+      const context = sampler.getContext('2d', { willReadFrequently: true });
+      context.drawImage(artwork, 0, 0, 8, 8);
+      const pixels = context.getImageData(0, 0, 8, 8).data;
+      const sum = [0, 0, 0];
+      for (let i = 0; i < pixels.length; i += 4) for (let c = 0; c < 3; c++) sum[c] += pixels[i + c];
+      rgb = sum.map(value => Math.round(value / 64));
+    } catch { /* An inaccessible image still has a readable metadata-based spine. */ }
+  }
+  const dark = rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722 < 125;
   return canvasTexture((context, width, height) => {
-    context.fillStyle = '#f1ede5';
+    context.fillStyle = `rgb(${rgb.join(',')})`;
     context.fillRect(0, 0, width, height);
+    if (artwork) {
+      context.globalAlpha = .25;
+      context.drawImage(artwork, 0, 0, width, height);
+      context.globalAlpha = 1;
+    }
+    context.fillStyle = dark ? 'rgba(10,12,15,.38)' : 'rgba(255,249,233,.65)';
+    context.fillRect(0, 0, width * .88, height);
+    let seed = hash;
+    for (let i = 0; i < 220; i++) {
+      seed = (seed * 16807) % 2147483647;
+      const x = seed % width, y = (seed >> 4) % height;
+      context.fillStyle = i % 2 ? '#ffffff12' : '#0000000c';
+      context.fillRect(x, y, 1 + seed % 9, 1);
+    }
     context.textBaseline = 'middle';
-    context.fillStyle = '#252321';
-    const year = String(cd.date || '').slice(0, 4);
-    const title = `${cd.artist}  /  ${cd.album}`;
-    fitText(context, title, width - 260, 65, 32);
-    context.fillText(title, 42, height / 2, width - 260);
+    context.fillStyle = dark ? '#f1eee6' : '#222326';
+    const artistWidth = Math.min(700, Math.max(330, cd.artist.length * 35));
+    fitText(context, cd.artist, artistWidth - 65, 64, 32);
+    context.fillText(cd.artist, 48, height / 2, artistWidth - 65);
+    const titleWidth = width - artistWidth - 260;
+    fitText(context, cd.album, titleWidth, 62, 28);
+    const family = hash % 3 === 0 ? 'Georgia, serif' : 'Arial, sans-serif';
+    context.font = context.font.replace('Arial, sans-serif', family).replace('700', '400');
+    context.fillText(cd.album, artistWidth + 25, height / 2, titleWidth);
     context.textAlign = 'right';
-    context.font = '60px Arial, sans-serif';
-    context.fillStyle = '#34302b';
-    context.fillText(year, width - 38, height / 2);
+    context.font = '34px Arial, sans-serif';
+    context.fillText(typeof cd.label === 'string' && cd.label ? cd.label : String(cd.date || '').slice(0, 4), width - 34, height / 2, 200);
   }, 2048, 128);
 }
 
@@ -198,6 +208,9 @@ function addCover(entry, cd) {
       entry.coverMaterial.map.dispose();
       entry.coverMaterial.map = texture;
       entry.coverMaterial.needsUpdate = true;
+      entry.spineMaterial.map.dispose();
+      entry.spineMaterial.map = spineTexture(cd, entry.index, texture.image);
+      entry.spineMaterial.needsUpdate = true;
       requestDraw();
     }, undefined, () => tryPath(index + 1));
   }
@@ -226,7 +239,7 @@ function makeCase(cd, index, total) {
   cover.castShadow = true;
   cover.receiveShadow = true;
   group.add(cover);
-  const spine = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - .34, HEIGHT - .12), new THREE.MeshStandardMaterial({ map: spineTexture(cd), roughness: .78 }));
+  const spine = new THREE.Mesh(new THREE.PlaneGeometry(WIDTH - .34, HEIGHT - .12), new THREE.MeshStandardMaterial({ map: spineTexture(cd, index), roughness: .78 }));
   spine.position.set(.07, 0, DEPTH / 2 - .06);
   group.add(spine);
 
@@ -241,9 +254,21 @@ function makeCase(cd, index, total) {
     rail(group, [.28, .035, .023], [-WIDTH / 2 + .26, HEIGHT / 2 - .065, -DEPTH / 2 + .2 + groove * .32]);
   }
   for (const z of [-DEPTH / 2 + .2, DEPTH / 2 - .2]) rail(group, [.14, .14, .2], [-WIDTH / 2 + .08, 0, z]);
+  for (const y of [-HEIGHT / 2 + .012, HEIGHT / 2 - .012]) {
+    const rim = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(WIDTH - .01, .018, DEPTH - .01)), new THREE.LineBasicMaterial({ color: '#c9cfcd', transparent: true, opacity: .38 }));
+    rim.position.y = y;
+    group.add(rim);
+    const seam = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(WIDTH - .035, .012, DEPTH - .035)), new THREE.LineBasicMaterial({ color: '#303935', transparent: true, opacity: .5 }));
+    seam.position.y = y - .018;
+    group.add(seam);
+    rail(group, [WIDTH - .035, .018, .025], [0, y + .025, DEPTH / 2 - .035]);
+  }
+  for (const x of [-WIDTH / 2 + .1, WIDTH / 2 - .1]) {
+    for (const z of [-DEPTH / 2 + .13, DEPTH / 2 - .13]) rail(group, [.045, HEIGHT - .04, .09], [x, 0, z]);
+  }
   const hit = new THREE.Mesh(new THREE.BoxGeometry(WIDTH, HEIGHT, DEPTH), new THREE.MeshBasicMaterial({ visible: false }));
   group.add(hit);
-  const entry = { group, paper: hit, coverMaterial, baseX, baseY, baseZ, alive: true, index };
+  const entry = { group, paper: hit, spineMaterial: spine.material, coverMaterial, baseX, baseY, baseZ, alive: true, index };
   addCover(entry, cd);
   return entry;
 }
@@ -275,15 +300,15 @@ function resize() {
     renderer.setSize(width, height, false);
   }
   const aspect = width / height;
-  const viewHeight = Math.max(7.5, 9.4 / aspect, entries.length * SPACING + 5.0);
+  const viewHeight = Math.max(7.6 / aspect, entries.length * SPACING + 1.65);
   camera.left = -viewHeight * aspect / 2;
   camera.right = viewHeight * aspect / 2;
   camera.top = viewHeight / 2;
   camera.bottom = -viewHeight / 2;
-  const targetX = width > 900 ? 1.65 : 0;
-  const targetY = Math.max(.5, entries.length * SPACING / 2);
-  camera.position.set(targetX + 2.0, targetY + 7.2, 12);
-  camera.lookAt(targetX, targetY, 0);
+  // Low, nearly frontal camera: the paper spines are the primary faces.
+  const targetY = viewHeight * .34 - .28;
+  camera.position.set(-2.7, targetY + 1.5, 15);
+  camera.lookAt(.12, targetY, 0);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
 }
@@ -325,20 +350,21 @@ function positionLabels() {
   }
 }
 
-function draw() {
-  if (!visible || !entries.length || document.hidden) return;
+function draw(now) {
+  if (!visible || !entries.length || document.hidden || mobile.matches) return;
   resize();
   let moving = false;
   for (const entry of entries) {
-    const active = entry.index === selected;
-    const targetX = entry.baseX + (active ? .65 : 0);
-    const targetY = entry.baseY;
-    const targetZ = entry.baseZ + (active ? .25 : 0);
-    const factor = animate && !reducedMotion.matches ? .085 : 1;
-    entry.group.position.x += (targetX - entry.group.position.x) * factor;
-    entry.group.position.y += (targetY - entry.group.position.y) * factor;
-    entry.group.position.z += (targetZ - entry.group.position.z) * factor;
-    if (Math.abs(targetX - entry.group.position.x) > .002 || Math.abs(targetZ - entry.group.position.z) > .002) moving = true;
+    const targetX = entry.baseX + (entry.index === selected ? .44 : entry.index === hovered ? .24 : 0);
+    if (entry.targetX !== targetX) {
+      entry.startX = entry.group.position.x;
+      entry.targetX = targetX;
+      entry.motionStart = now;
+    }
+    const progress = animate && !reducedMotion.matches ? Math.min(1, (now - entry.motionStart) / 300) : 1;
+    const eased = progress * progress * (3 - 2 * progress);
+    entry.group.position.x = entry.startX + (targetX - entry.startX) * eased;
+    if (progress < 1) moving = true;
   }
   positionLabels();
   renderer.render(scene, camera);
@@ -346,8 +372,8 @@ function draw() {
 }
 
 function requestDraw() {
-  if (!frame && visible && !document.hidden) {
-    frame = requestAnimationFrame(() => { frame = 0; draw(); });
+  if (!frame && visible && !document.hidden && !mobile.matches) {
+    frame = requestAnimationFrame(now => { frame = 0; draw(now); });
   }
 }
 
@@ -361,9 +387,9 @@ function caseAt(event) {
 
 const api = {
   onSelect: null,
-  onOpen: null,
+  hover(index) { hovered = index; requestDraw(); },
   setAlbums(albums) {
-    const signature = JSON.stringify(albums.map(cd => [cd.id, cd.album, cd.artist, cd.date, cd.releaseGroupId]));
+    const signature = JSON.stringify(albums.map(cd => [cd.id, cd.album, cd.artist, cd.date, cd.label, cd.releaseGroupId]));
     if (signature === albumSignature && entries.length === albums.length) {
       requestDraw();
       return;
@@ -391,13 +417,13 @@ canvas.addEventListener('pointermove', event => {
   if (event.pointerType === 'touch') return;
   const index = caseAt(event);
   canvas.style.cursor = index === undefined ? 'default' : 'pointer';
-  if (index !== undefined && index !== selected) api.onSelect?.(index);
+  api.hover(index ?? -1);
 });
+canvas.addEventListener('pointerleave', () => api.hover(-1));
 canvas.addEventListener('click', event => {
   const index = caseAt(event);
   if (index === undefined) return;
-  if (matchMedia('(hover: none)').matches && index !== selected) api.onSelect?.(index);
-  else api.onOpen?.(index);
+  api.onSelect?.(index);
 });
 canvas.addEventListener('keydown', event => {
   if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
@@ -405,12 +431,13 @@ canvas.addEventListener('keydown', event => {
     api.onSelect?.((selected + (event.key === 'ArrowUp' ? -1 : 1) + entries.length) % entries.length);
   } else if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
-    api.onOpen?.(selected);
+    api.onSelect?.(selected);
   }
 });
 new ResizeObserver(requestDraw).observe(stage);
 document.addEventListener('visibilitychange', requestDraw);
 reducedMotion.addEventListener('change', requestDraw);
+mobile.addEventListener('change', requestDraw);
 stage.classList.add('is-3d');
 window.CDStack3D = api;
 window.dispatchEvent(new Event('cd-stack-3d-ready'));

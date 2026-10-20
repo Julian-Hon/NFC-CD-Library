@@ -10,13 +10,23 @@ const results = document.querySelector('#search-results');
 const grid = document.querySelector('#album-grid');
 const stackView = document.querySelector('#stack-view');
 const stack = document.querySelector('#cd-stack');
-const state = { cds: [], accountUserId: null, cloudRequest: 0, scanBusy: false, selected: null, mode: 'new', view: loadView(), animateStack: loadMotion(), activeIndex: 0, lastRequestAt: 0, bridge: false, pendingUid: null, lastScanId: 0, currentScan: null };
+const state = { query: '', selectedId: null, filtered: [], stackCds: [], stackPage: 0, favoriteBusy: false, cds: [], accountUserId: null, cloudRequest: 0, scanBusy: false, selected: null, mode: 'new', view: loadView(), animateStack: loadMotion(), activeIndex: 0, lastRequestAt: 0, bridge: false, pendingUid: null, lastScanId: 0, currentScan: null };
 const requestCache = new Map();
 let requestQueue = Promise.resolve();
+let scanToastTimer;
+
+function showScanToast(message) {
+  const toast = document.querySelector('#scan-toast');
+  clearTimeout(scanToastTimer);
+  toast.textContent = message;
+  toast.hidden = false;
+  scanToastTimer = setTimeout(() => { toast.hidden = true; }, 3500);
+}
 
 function loadView() {
   try {
-    return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'stack';
+    const view = localStorage.getItem(VIEW_KEY);
+    return ['stack', 'grid', 'artists', 'genres', 'years'].includes(view) ? view : 'stack';
   } catch {
     return 'stack';
   }
@@ -39,6 +49,7 @@ function updateStackMotion() {
 }
 
 function setView(view) {
+  if (!['stack', 'grid', 'artists', 'genres', 'years'].includes(view)) return;
   state.view = view;
   try {
     localStorage.setItem(VIEW_KEY, view);
@@ -83,6 +94,9 @@ function onAuthChange() {
     state.accountUserId = null;
     state.cloudRequest++;
     state.cds = [];
+    state.selectedId = null;
+    state.query = '';
+    document.querySelector('#collection-search').value = '';
     state.currentScan = null;
     state.pendingUid = null;
     state.lastScanId = 0;
@@ -140,6 +154,10 @@ async function pollLatestScan() {
   state.scanBusy = true;
   try {
     const { scan, reader } = await bridgeRequest('/api/scans/latest');
+    const indicator = document.querySelector('#reader-indicator');
+    indicator.dataset.state = reader?.connected ? 'connected' : reader?.port ? 'issue' : 'offline';
+    indicator.title = reader?.connected ? `NFC reader connected · ${reader.port}` : 'NFC reader unavailable. Click for details.';
+    indicator.setAttribute('aria-label', indicator.title);
     document.querySelector('#reader-status').textContent = reader?.connected
       ? `NFC reader connected · ${reader.port}`
       : reader?.port ? `Reader unavailable · ${reader.port}` : 'Local NFC bridge · test mode';
@@ -169,8 +187,17 @@ async function pollLatestScan() {
     state.lastScanId = scan.id;
     renderScan(scan, cd);
     const recent = Date.now() - Date.parse(scan.scannedAt) < 30_000;
+    if (cd && (recent || !firstScan)) {
+      if (!state.cds.some(item => item.id === cd.id)) state.cds.unshift(cd);
+      state.selectedId = cd.id;
+      state.query = '';
+      document.querySelector('#collection-search').value = '';
+      setView('stack');
+      showScanToast(`Scanned ${cd.album}`);
+    }
     if (!link && (recent || !firstScan) && !dialog.open) openAdd(scan.uid);
   } catch {
+    document.querySelector('#reader-indicator').dataset.state = 'issue';
     document.querySelector('#scan-title').textContent = 'Could not check this scan';
     document.querySelector('#scan-description').textContent = 'Check the bridge and your account connection, then scan again.';
     document.querySelector('#scan-action').hidden = true;
@@ -203,19 +230,21 @@ function editionLabel(release) {
   return parts.filter(Boolean).join(' · ') || 'CD edition';
 }
 
-function cover(container, releaseId, releaseGroupId) {
+function cover(container, releaseId, releaseGroupId, size = 250) {
+  const request = (container.coverRequest || 0) + 1;
+  container.coverRequest = request;
   container.replaceChildren();
   const fallback = document.createElement('div');
   fallback.className = 'album-cover';
   fallback.textContent = '◎';
   container.append(fallback);
-  const ids = [releaseId && `/release/${releaseId}/front-250`, releaseGroupId && `/release-group/${releaseGroupId}/front-250`].filter(Boolean);
+  const ids = [releaseId && `/release/${releaseId}/front-${size}`, releaseGroupId && `/release-group/${releaseGroupId}/front-${size}`].filter(Boolean);
   const image = new Image();
   image.className = 'album-cover';
   image.alt = '';
   image.draggable = false;
   let index = 0;
-  image.onload = () => container.replaceChildren(image);
+  image.onload = () => { if (container.coverRequest === request) container.replaceChildren(image); };
   image.onerror = () => {
     index++;
     if (index < ids.length) image.src = COVER_ART + ids[index];
@@ -223,94 +252,118 @@ function cover(container, releaseId, releaseGroupId) {
   if (ids.length) image.src = COVER_ART + ids[0];
 }
 
+const STACK_PAGE_SIZE = 12;
 function renderLibrary() {
   updateStackMotion();
-  document.querySelector('#cd-count').textContent = `${state.cds.length} ${state.cds.length === 1 ? 'CD' : 'CDs'}`;
-  const emptyState = document.querySelector('#empty-state');
-  emptyState.hidden = state.cds.length > 0;
-  emptyState.classList.toggle('is-stack', state.view === 'stack');
-  document.querySelector('#empty-title').textContent = state.view === 'stack' ? 'Your stack is empty.' : 'No CDs yet.';
-  document.querySelector('#empty-description').textContent = state.view === 'stack'
-    ? 'Add a CD to see its cover become the first case in your stack.'
-    : 'Add an album to start your library, then explore it in Grid or Stack view.';
-  grid.hidden = state.cds.length === 0 || state.view !== 'grid';
-  stackView.hidden = state.cds.length === 0 || state.view !== 'stack';
+  state.filtered = LibraryUI.filter(state.cds, state.query);
+  if (!state.filtered.some(cd => cd.id === state.selectedId) && state.filtered.length) state.selectedId = state.filtered[0].id;
+  state.activeIndex = Math.max(0, state.cds.findIndex(cd => cd.id === state.selectedId));
+  const filteredIndex = state.filtered.findIndex(cd => cd.id === state.selectedId);
+  state.stackPage = Math.max(0, Math.floor(filteredIndex / STACK_PAGE_SIZE));
+  document.querySelector('#cd-count').textContent = state.query
+    ? `${state.filtered.length} of ${state.cds.length} CDs`
+    : `${state.cds.length} ${state.cds.length === 1 ? 'CD' : 'CDs'}`;
+  document.querySelectorAll('[data-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.view === state.view)));
+  document.querySelector('#footer-view').value = state.view;
+  const empty = document.querySelector('#empty-state');
+  empty.hidden = state.filtered.length > 0;
+  document.querySelector('#empty-title').textContent = state.cds.length ? 'No matching albums.' : 'Your collection starts here.';
+  document.querySelector('#empty-description').textContent = state.cds.length ? 'Try another album or artist in the search above.' : 'Add your first CD, or scan a new NFC tag to link an album.';
+  grid.hidden = !state.filtered.length || state.view === 'stack';
+  stackView.hidden = !state.filtered.length || state.view !== 'stack';
+  document.querySelector('#stack-controls').hidden = stackView.hidden;
   document.body.classList.toggle('stack-active', !stackView.hidden);
   window.CDStack3D?.setVisible(!stackView.hidden);
-  document.querySelector('#grid-view').setAttribute('aria-pressed', state.view === 'grid');
-  document.querySelector('#stack-view-button').setAttribute('aria-pressed', state.view === 'stack');
   grid.replaceChildren();
-  if (state.view === 'stack') {
-    renderStack();
-    return;
-  }
-  for (const cd of state.cds) {
-    const card = document.createElement('button');
-    card.className = 'album-card';
-    card.type = 'button';
-    card.setAttribute('aria-label', `View ${cd.album} by ${cd.artist}`);
-    const art = document.createElement('div');
-    cover(art, cd.id, cd.releaseGroupId);
-    const name = document.createElement('strong');
-    name.textContent = cd.album;
-    const artist = document.createElement('small');
-    artist.textContent = cd.artist;
-    card.append(art, name, artist);
-    card.addEventListener('click', () => showDetails(cd, 'saved'));
-    grid.append(card);
-  }
+  if (state.view === 'stack') { renderStack(); return; }
+  const grouped = ['artists', 'genres', 'years'].includes(state.view);
+  grid.classList.toggle('is-grouped', grouped);
+  if (grouped) {
+    for (const [title, cds] of LibraryUI.groups(state.filtered, state.view)) {
+      const section = document.createElement('section');
+      section.className = 'collection-group';
+      const heading = document.createElement('h2');
+      heading.textContent = `${title} · ${cds.length}`;
+      const albums = document.createElement('div');
+      albums.className = 'group-albums';
+      cds.forEach(cd => albums.append(albumCard(cd)));
+      section.append(heading, albums);
+      grid.append(section);
+    }
+  } else state.filtered.forEach(cd => grid.append(albumCard(cd)));
+}
+
+function albumCard(cd) {
+  const card = document.createElement('button');
+  card.className = 'album-card';
+  card.type = 'button';
+  card.setAttribute('aria-label', `Select ${cd.album} by ${cd.artist}`);
+  card.setAttribute('aria-pressed', String(cd.id === state.selectedId));
+  const art = document.createElement('div');
+  cover(art, cd.id, cd.releaseGroupId);
+  const name = document.createElement('strong');
+  name.textContent = cd.album;
+  const artist = document.createElement('small');
+  artist.textContent = cd.artist;
+  card.append(art, name, artist);
+  card.addEventListener('click', () => {
+    state.selectedId = cd.id;
+    setView('stack');
+  });
+  return card;
 }
 
 function selectStack(index, focusCase = false) {
   const cd = state.cds[index];
   if (!cd) return;
-  const previewCover = document.querySelector('#stack-preview-cover');
-  const coverChanged = state.activeIndex !== index || !previewCover.childElementCount;
+  if (state.selectedId !== cd.id) document.querySelector('#favorite-status').textContent = '';
+  state.selectedId = cd.id;
   state.activeIndex = index;
-  window.CDStack3D?.select(index);
-  for (const caseButton of stack.querySelectorAll('.stack-case')) {
-    caseButton.setAttribute('aria-pressed', String(Number(caseButton.dataset.index) === index));
+  const filteredIndex = state.filtered.findIndex(item => item.id === cd.id);
+  const page = Math.max(0, Math.floor(filteredIndex / STACK_PAGE_SIZE));
+  if (page !== state.stackPage) { state.stackPage = page; renderStack(); }
+  const localIndex = state.stackCds.findIndex(item => item.id === cd.id);
+  window.CDStack3D?.select(localIndex);
+  for (const button of stack.querySelectorAll('.stack-case')) button.setAttribute('aria-pressed', String(button.dataset.id === cd.id));
+  const preview = document.querySelector('#stack-preview-cover');
+  if (preview.dataset.album !== cd.id) {
+    preview.dataset.album = cd.id;
+    cover(preview, cd.id, cd.releaseGroupId, 500);
   }
-  document.querySelector('#stack-position').textContent = `CD ${index + 1} OF ${state.cds.length}`;
+  document.querySelector('#stack-position').textContent = `CD ${filteredIndex + 1} OF ${state.filtered.length}`;
   document.querySelector('#stack-album').textContent = cd.album;
   document.querySelector('#stack-artist').textContent = cd.artist;
-  document.querySelector('#stack-edition').textContent = [
-    cd.date?.slice(0, 4),
-    cd.media?.join(' + '),
-    `${cd.tracks.length} ${cd.tracks.length === 1 ? 'track' : 'tracks'}`
-  ].filter(Boolean).join(' · ');
-  if (coverChanged) cover(previewCover, cd.id, cd.releaseGroupId);
-  document.querySelector('#stack-previous').disabled = state.cds.length < 2;
-  document.querySelector('#stack-next').disabled = state.cds.length < 2;
-  if (focusCase) stack.querySelector(`[data-index="${index}"]`)?.focus({ preventScroll: true });
+  const metadata = [cd.date?.slice(0, 4), LibraryUI.genres(cd).slice(0, 2).join(', '), LibraryUI.label(cd)].filter(Boolean);
+  if (metadata.length < 2) metadata.push(`${cd.tracks?.length || 0} tracks`);
+  document.querySelector('#stack-edition').textContent = metadata.join('  •  ');
+  const favorite = document.querySelector('#favorite-cd');
+  favorite.setAttribute('aria-pressed', String(Boolean(cd.favorite)));
+  favorite.setAttribute('aria-label', cd.favorite ? 'Remove from favorites' : 'Favorite album');
+  favorite.disabled = state.favoriteBusy;
+  document.querySelector('#stack-previous').disabled = state.filtered.length < 2;
+  document.querySelector('#stack-next').disabled = state.filtered.length < 2;
+  const start = state.stackPage * STACK_PAGE_SIZE;
+  document.querySelector('#stack-range').textContent = state.filtered.length > STACK_PAGE_SIZE
+    ? `${start + 1}–${Math.min(start + STACK_PAGE_SIZE, state.filtered.length)} of ${state.filtered.length}`
+    : `${Math.max(0, filteredIndex) + 1} / ${state.filtered.length}`;
+  document.querySelector('#album-more').open = false;
+  if (focusCase) stack.querySelector(`[data-index="${localIndex}"]`)?.focus({ preventScroll: true });
 }
 
 function renderStack() {
   stack.replaceChildren();
-  document.querySelector('#stack-preview-cover').replaceChildren();
-  if (!state.cds.length) {
-    window.CDStack3D?.setAlbums([]);
-    return;
-  }
-  state.activeIndex = Math.min(state.activeIndex, state.cds.length - 1);
-  const offsets = [0, -13, 9, -7, 16, -11, 5, -3, 12, -15];
-  const tilts = [-0.3, 0.2, -0.2, 0.35, -0.15, 0.1, -0.3, 0.25, -0.1, 0.15];
-  for (const [index, cd] of state.cds.entries()) {
-    const caseButton = document.createElement('button');
-    caseButton.type = 'button';
-    caseButton.className = 'stack-case';
-    caseButton.dataset.index = String(index);
-    caseButton.style.setProperty('--case-offset', `${offsets[index % offsets.length]}px`);
-    caseButton.style.setProperty('--case-tilt', `${tilts[index % tilts.length]}deg`);
-    caseButton.style.setProperty('--case-order', String(index));
-    caseButton.setAttribute('aria-label', `Preview ${cd.album} by ${cd.artist}; click for details`);
-    caseButton.title = `${cd.album} — ${cd.artist}`;
-    const hinge = document.createElement('span');
-    hinge.className = 'stack-hinge';
-    hinge.setAttribute('aria-hidden', 'true');
-    const art = document.createElement('span');
-    art.className = 'stack-art';
-    cover(art, cd.id, cd.releaseGroupId);
+  const start = state.stackPage * STACK_PAGE_SIZE;
+  state.stackCds = state.filtered.slice(start, start + STACK_PAGE_SIZE);
+  const offsets = [0, -9, 6, -5, 11, -7, 3, -2];
+  for (const [localIndex, cd] of state.stackCds.entries()) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'stack-case';
+    button.dataset.index = String(localIndex);
+    button.dataset.id = cd.id;
+    button.style.setProperty('--case-offset', `${offsets[localIndex % offsets.length]}px`);
+    button.setAttribute('aria-label', `Select ${cd.album} by ${cd.artist}`);
+    button.title = `${cd.artist} — ${cd.album}`;
     const copy = document.createElement('span');
     copy.className = 'stack-spine-copy';
     const album = document.createElement('strong');
@@ -318,27 +371,44 @@ function renderStack() {
     const artist = document.createElement('small');
     artist.textContent = cd.artist;
     copy.append(album, artist);
-    caseButton.append(hinge, art, copy);
-    caseButton.addEventListener('pointerenter', event => {
-      if (event.pointerType !== 'touch') selectStack(index);
-    });
-    caseButton.addEventListener('focus', () => selectStack(index));
-    caseButton.addEventListener('click', () => {
-      if (matchMedia('(hover: none)').matches && state.activeIndex !== index) {
-        selectStack(index);
-      } else {
-        showDetails(cd, 'saved');
-      }
-    });
-    stack.append(caseButton);
+    button.append(copy);
+    button.addEventListener('pointerenter', event => { if (event.pointerType !== 'touch') window.CDStack3D?.hover(localIndex); });
+    button.addEventListener('pointerleave', () => window.CDStack3D?.hover(-1));
+    button.addEventListener('focus', () => window.CDStack3D?.hover(localIndex));
+    button.addEventListener('blur', () => window.CDStack3D?.hover(-1));
+    button.addEventListener('click', () => selectStack(state.cds.findIndex(item => item.id === cd.id)));
+    stack.append(button);
   }
-  window.CDStack3D?.setAlbums(state.cds);
-  selectStack(state.activeIndex);
+  window.CDStack3D?.setAlbums(state.stackCds);
+  if (state.stackCds.length) selectStack(state.activeIndex);
 }
 
 function moveStack(step) {
-  if (!state.cds.length) return;
-  selectStack((state.activeIndex + step + state.cds.length) % state.cds.length, true);
+  if (!state.filtered.length) return;
+  const index = state.filtered.findIndex(cd => cd.id === state.selectedId);
+  const next = state.filtered[(index + step + state.filtered.length) % state.filtered.length];
+  selectStack(state.cds.findIndex(cd => cd.id === next.id), true);
+}
+
+async function toggleFavorite() {
+  const cd = state.cds.find(item => item.id === state.selectedId);
+  const userId = window.cdLibraryAuth?.user?.id;
+  if (!cd || !userId || state.favoriteBusy) return;
+  state.favoriteBusy = true;
+  const button = document.querySelector('#favorite-cd');
+  button.disabled = true;
+  const message = document.querySelector('#favorite-status');
+  message.textContent = '';
+  const updated = { ...cd, favorite: !cd.favorite };
+  try {
+    const { data, error } = await window.cdLibraryAuth.client.from('cds').update({ payload: updated }).eq('id', cd.id).select('id').maybeSingle();
+    if (error || !data) throw error || new Error('Your account could not update this album.');
+    if (window.cdLibraryAuth?.user?.id !== userId) return;
+    state.cds = state.cds.map(item => item.id === cd.id ? updated : item);
+    selectStack(state.activeIndex);
+    message.textContent = updated.favorite ? 'Added to favorites.' : 'Removed from favorites.';
+  } catch (error) { message.textContent = `Could not save favorite: ${error.message}`; }
+  finally { state.favoriteBusy = false; button.disabled = false; }
 }
 
 function setStatus(message, isError = false) {
@@ -437,7 +507,7 @@ async function selectRelease(release, inputArtist) {
   buttons.forEach(button => button.disabled = true);
   setStatus('Loading track list…');
   try {
-    const detail = await musicBrainzGet(`/release/${encodeURIComponent(release.id)}?inc=recordings+release-groups&fmt=json`, () => {
+    const detail = await musicBrainzGet(`/release/${encodeURIComponent(release.id)}?inc=recordings+release-groups+artist-credits+labels+genres&fmt=json`, () => {
       setStatus('MusicBrainz is busy. Retrying automatically…');
     });
     const tracks = (detail.media || [])
@@ -456,6 +526,8 @@ async function selectRelease(release, inputArtist) {
       artist: artistName(detail['artist-credit'], inputArtist),
       date: detail.date || '',
       country: detail.country || '',
+      genres: (detail.genres || []).map(genre => genre.name).filter(Boolean),
+      label: (detail['label-info'] || []).map(info => info.label?.name).find(Boolean) || '',
       media: detail.media.map(m => m.format).filter(Boolean),
       tracks
     };
@@ -510,19 +582,40 @@ function showDetails(cd, mode) {
 }
 
 document.querySelector('#add-cd').addEventListener('click', () => openAdd());
-window.addEventListener('cd-stack-3d-ready', () => {
+function connectStackRenderer() {
   const viewer = window.CDStack3D;
-  viewer.onSelect = index => selectStack(index);
-  viewer.onOpen = index => {
-    if (state.cds[index]) showDetails(state.cds[index], 'saved');
+  if (!viewer) return;
+  viewer.onSelect = index => {
+    const cd = state.stackCds[index];
+    if (cd) selectStack(state.cds.findIndex(item => item.id === cd.id));
   };
   viewer.setMotion(state.animateStack);
   viewer.setVisible(!stackView.hidden);
   if (state.view === 'stack') renderStack();
-});
+}
+window.addEventListener('cd-stack-3d-ready', connectStackRenderer);
 window.addEventListener('cd-library-auth-change', onAuthChange);
-document.querySelector('#grid-view').addEventListener('click', () => setView('grid'));
-document.querySelector('#stack-view-button').addEventListener('click', () => setView('stack'));
+document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
+document.querySelector('#footer-view').addEventListener('change', event => setView(event.target.value));
+document.querySelector('#collection-search').addEventListener('input', event => { state.query = event.target.value; renderLibrary(); });
+document.querySelector('#favorite-cd').addEventListener('click', toggleFavorite);
+document.querySelector('#more-details').addEventListener('click', () => {
+  document.querySelector('#album-more').open = false;
+  if (state.cds[state.activeIndex]) showDetails(state.cds[state.activeIndex], 'saved');
+});
+document.querySelector('#more-remove').addEventListener('click', () => {
+  document.querySelector('#album-more').open = false;
+  if (state.cds[state.activeIndex]) {
+    showDetails(state.cds[state.activeIndex], 'saved');
+    document.querySelector('#remove-cd').focus();
+  }
+});
+document.querySelector('#reader-indicator').addEventListener('click', () => {
+  const panel = document.querySelector('#scan-panel');
+  panel.hidden = false;
+  const open = panel.classList.toggle('is-open');
+  document.querySelector('#reader-indicator').setAttribute('aria-expanded', String(open));
+});
 document.querySelector('#stack-motion').addEventListener('click', () => {
   state.animateStack = !state.animateStack;
   try {
@@ -603,8 +696,10 @@ document.querySelector('#save-cd').addEventListener('click', async event => {
   }
   if (uid && state.currentScan?.uid === uid) renderScan(state.currentScan, cd);
   state.pendingUid = null;
-  state.activeIndex = 0;
-  renderLibrary();
+  state.selectedId = cd.id;
+  state.query = '';
+  document.querySelector('#collection-search').value = '';
+  setView('stack');
   dialog.close();
 });
 document.querySelector('#remove-cd').addEventListener('click', async () => {
@@ -634,6 +729,7 @@ document.querySelector('#remove-cd').addEventListener('click', async () => {
     void pollLatestScan();
   }
 });
+connectStackRenderer();
 renderLibrary();
 onAuthChange();
 void initBridge();

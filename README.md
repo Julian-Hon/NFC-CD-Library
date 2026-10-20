@@ -16,7 +16,7 @@ The older `music_display` and `nfc_library` sketches remain available as indepen
 
 The website's header has email sign-up, sign-in, and sign-out using the project's URL and **publishable** key in `supabase-config.js`. The publishable key is safe in browser code only because the database tables have row level security policies. Never add a Supabase `sb_secret_` key or database password to this repository or the website.
 
-Signing in does not yet migrate or sync the CD library. The USB bridge continues using the local SQLite database, and the GitHub Pages version continues using that browser's local storage. The next step is to add a reviewed import into the account's `cds` and `tag_links` tables and then update the bridge lookup flow.
+Authentication is required. CDs, favorites, and tag links are stored in the signed-in user's Supabase account. The local SQLite database is an ESP32 display cache; there is no separate browser-local library.
 
 Supabase's default email sender is intended for testing with project team email addresses. Public sign-ups will need a configured SMTP provider.
 
@@ -26,9 +26,19 @@ The companion website is at the repository root. Serve this folder locally (for 
 
 Select **Add CD**, enter an album and artist, choose the matching CD edition, review its cover and track list, then save it. Search and track data come from [MusicBrainz](https://musicbrainz.org/); cover images come from the [Cover Art Archive](https://coverartarchive.org/). MusicBrainz requests are spaced apart, successful results are reused during the page session, and temporary busy responses are retried. A missing cover displays a placeholder.
 
-The GitHub Pages library uses browser local storage. It stays on the same browser and origin, with no account or sync yet. A local USB NFC bridge is available below for the first scan-to-web workflow.
+GitHub Pages hosts the static frontend, which connects directly to Supabase with account-scoped access. Physical USB scans require the local bridge below.
 
-Once you have saved CDs, switch between **Grid** and **Stack** views. Your view choice is saved in this browser and restored after refresh. Stack view fills the library area with a 3D pile of jewel cases rendered in the browser with [Three.js](https://threejs.org/). Hover or focus on a spine to preview its cover; click it or select **View CD details** to open the album. The arrow buttons and Up/Down keys move through the pile. On a touch screen, tap once to preview and again to open. The animation button controls the slide-out motion, and reduced-motion system settings are respected. If WebGL or the Three.js module is unavailable, the readable CSS stack remains available.
+Stack is the default view; your view choice is restored after refresh. The interactive [Three.js](https://threejs.org/) jewel cases use a nearly frontal camera, cover-derived spine designs, transparent shells, and 300 ms slide animations. Hover slides a case outward; click selects it and updates the large preview. Selection remains until you select another album. Track list opens the existing details dialog; the heart saves a favorite to Supabase; the more menu offers details and removal. There is no simulated playback.
+
+Search filters albums and artists. Grid, Artists, Genres, and Years share the same collection. Missing genre data appears under Uncategorized. New MusicBrainz additions include genres and label when supplied by the service; older records are not silently rewritten. Stacks show up to 12 cases at once; arrows and keyboard navigation continue through the filtered collection. Mobile and unavailable WebGL use accessible spine buttons. Reduced-motion settings and the animation toggle are respected.
+
+The small header NFC indicator opens connection details. A fresh linked scan selects its album, clears search, opens Stack, and displays a temporary notification. Unknown tags retain the enrollment dialog. No serial protocol changes were needed for this redesign.
+
+The room is a local generated photographic asset behind the interactive 3D cases and shadows; see [asset notes](assets/README.md). No new production JavaScript dependency was added. Three.js remains pinned to 0.186.1 via jsDelivr.
+
+### Frontend regression check
+
+Run `npm install --prefix local_data/qa --no-audit --no-fund linkedom@0.18.12`, then `node tests/library-ui.cjs` from the repository root. This isolated DOM test uses in-memory accounts, albums, and scan events; it does not contact Supabase or alter the physical reader. It covers grouping, search, selection, paging, favorites and save failure, add/delete, linked scans, and unknown-tag enrollment. Visual WebGL and fresh physical scans require browser/hardware checks.
 
 ## Standalone Listening sketch
 
@@ -58,9 +68,9 @@ The local bridge reads the `Tag detected. UID: ...` lines from the ESP32, saves 
 2. Keep the ESP32 connected by USB. Close Arduino Serial Monitor, which otherwise holds the COM port.
 3. Install the bridge's serial and image libraries once: `python -m pip install -r requirements.txt`.
 4. Run `python local_bridge.py --serial COM3` from the repository folder. Replace `COM3` if Arduino IDE shows a different port.
-5. Open `http://127.0.0.1:8317/` on **this computer**. The NFC panel appears above the library.
+5. Open `http://127.0.0.1:8317/` on **this computer**. Use the small NFC indicator in the header to view connection details.
 6. Scan a sticker. Search for its album and artist, select the correct CD edition, and save. Scan it again to see the saved CD in the NFC panel and a jewel case style view with album art, title, artist, and track count on the ESP32.
 
-The bridge obtains cover art from the Cover Art Archive, resizes it to 160 × 160 pixels, and caches it in ignored `local_data/covers/`. It sends the image and a short lookup result to the ESP32 over USB serial. The ESP32 does not need Wi-Fi or secrets for this mode. If an album has no available cover or the art service is offline, the screen shows a disc placeholder. The bridge listens on localhost only and has no account or remote access. Its database is in ignored `local_data/`. The GitHub Pages site remains browser-only until a hosted backend and authentication are added. Browser-local CDs from the GitHub Pages origin are not automatically imported into this local database.
+The bridge obtains cover art from the Cover Art Archive, resizes it to 160 × 160 pixels, and caches it in ignored `local_data/covers/`. It sends the image and a short lookup result to the ESP32 over USB serial. The ESP32 does not need Wi-Fi or secrets for this mode. If an album has no available cover or the art service is offline, the screen shows a disc placeholder. The bridge listens on localhost only and has no account or remote access. Its database is in ignored `local_data/`. The GitHub Pages site uses the same Supabase account library but cannot access this localhost USB reader directly.
 
 Keep `secrets.h` private. Git ignores it, but verify staged files before pushing. The sketch currently uses `WiFiClientSecure::setInsecure()` for HTTPS requests, which skips certificate validation. This is suitable only for testing; a network attacker could intercept the Last.fm API key or alter responses.

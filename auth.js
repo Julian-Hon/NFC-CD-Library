@@ -23,6 +23,8 @@ function setAuthMode(signUp) {
 
 function renderAuthUser(user) {
   window.cdLibraryAuth.user = user;
+  document.querySelectorAll('.account-only').forEach(element => { element.hidden = !user; });
+  document.querySelector('#profile-menu').open = false;
   document.querySelector('#auth-open').hidden = Boolean(user);
   document.querySelector('#auth-sign-out').hidden = !user;
   const name = document.querySelector('#auth-user');

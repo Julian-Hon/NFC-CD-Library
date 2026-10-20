@@ -287,6 +287,7 @@ class Handler(BaseHTTPRequestHandler):
         names = {
             "/": "index.html", "/index.html": "index.html",
             "/app.js": "app.js", "/stack-3d.js": "stack-3d.js", "/auth.js": "auth.js",
+            "/library-ui.js": "library-ui.js", "/assets/listening-room.png": "assets/listening-room.png",
             "/supabase-config.js": "supabase-config.js", "/style.css": "style.css",
         }
         filename = names.get(path)
@@ -294,7 +295,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         body = (ROOT / filename).read_bytes()
-        content_type = "text/html" if filename.endswith("html") else "text/javascript" if filename.endswith("js") else "text/css"
+        content_type = "image/png" if filename.endswith("png") else "text/html" if filename.endswith("html") else "text/javascript" if filename.endswith("js") else "text/css"
         self.send_response(200)
         self.send_header("Content-Type", f"{content_type}; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))

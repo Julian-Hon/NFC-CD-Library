@@ -1,0 +1,30 @@
+const {parseHTML}=require('../local_data/qa/node_modules/linkedom');
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const {window}=parseHTML(fs.readFileSync('index.html','utf8'));
+const document=window.document;
+document.querySelectorAll('select').forEach(e=>Object.defineProperty(e,'value',{writable:true,value:'stack'}));
+document.querySelectorAll('dialog').forEach(e=>{e.showModal=()=>e.open=true;e.close=()=>{e.open=false;e.dispatchEvent(new window.Event('close'));};});
+document.querySelector('#search-form').reset=()=>{};
+let rows=Array.from({length:15},(_,i)=>({id:'cd'+i,album:'Album '+i,artist:'Artist '+i%3,date:'200'+i%9,tracks:[],media:['CD']}));
+let scan=null,fail=false;
+const client={from(table){let op='select',value,id;const q={select(){return q},order(){return q},eq(k,v){id=v;return q},maybeSingle(){return q},insert(v){op='insert';value=v;return q},update(v){op='update';value=v;return q},delete(){op='delete';return q},then(resolve,reject){try{if(fail)return resolve({error:new Error('test failure')});if(table==='tag_links')return resolve({data:scan?.uid==='known'?{cd_id:'cd14'}:null});if(op==='insert')rows.unshift(value.payload);if(op==='update')rows=rows.map(r=>r.id===id?value.payload:r);if(op==='delete')rows=rows.filter(r=>r.id!==id);resolve({data:id?{id,payload:rows.find(r=>r.id===id)}:rows.map(payload=>({payload})),error:null});}catch(e){reject(e)}}};return q}};
+window.cdLibraryAuth={user:{id:'test'},client};
+window.CDStack3D={setAlbums(){},setMotion(){},setVisible(){},select(){},hover(){}};
+const context=vm.createContext({window,document,console,localStorage:{getItem(){return null},setItem(){}},Image:function(){return document.createElement('img')},setTimeout,clearTimeout,setInterval(){},fetch:async()=>({ok:true,json:async()=>({scan,reader:{connected:true,port:'TEST'}})}),confirm:()=>true,alert:m=>{throw Error(m)}});
+vm.runInContext(fs.readFileSync('library-ui.js','utf8'),context);context.LibraryUI=window.LibraryUI;
+vm.runInContext(fs.readFileSync('app.js','utf8'),context);
+const run=s=>vm.runInContext(s,context),flush=()=>new Promise(r=>setImmediate(r));
+(async()=>{await flush();assert.equal(run('state.cds.length'),15);assert.equal(run('state.stackCds.length'),12);
+run('selectStack(14)');assert.equal(run('state.stackPage'),1);assert.equal(document.querySelector('#stack-album').textContent,'Album 14');
+for(const view of ['grid','artists','genres','years','stack']){run(`setView('${view}')`);assert.equal(run('state.selectedId'),'cd14')}
+run("state.query='artist 1';renderLibrary()");assert.equal(run('state.filtered.length'),8);
+run("state.query='nothing';renderLibrary()");assert.equal(document.querySelector('#empty-state').hidden,false);
+run("state.query='';renderLibrary();selectStack(14)");await run('toggleFavorite()');assert.equal(rows.find(r=>r.id==='cd14').favorite,true);
+fail=true;await run('toggleFavorite()');assert.equal(run('state.cds[14].favorite'),true);fail=false;
+context.newCD={id:'new',album:'New album',artist:'New artist',tracks:[]};run("showDetails(newCD,'new')");document.querySelector('#save-cd').click();await flush();assert.equal(rows.length,16);assert.equal(run('state.selectedId'),'new');
+run("showDetails(newCD,'saved')");document.querySelector('#remove-cd').click();await flush();assert.equal(rows.length,15);assert.equal(run('state.cds.length'),15);
+scan={id:1,uid:'known',scannedAt:new Date().toISOString()};await run('pollLatestScan()');assert.equal(run('state.selectedId'),'cd14');assert.match(document.querySelector('#scan-toast').textContent,/Album 14/);
+scan={id:2,uid:'unknown',scannedAt:new Date().toISOString()};await run('pollLatestScan()');assert.equal(run('state.pendingUid'),'unknown');assert.equal(document.querySelector('#cd-dialog').open,true);
+console.log('PASS: load, 12-case paging, all views, selection, search, favorite success/failure, add, delete, mapped NFC, unknown NFC enrollment');process.exit(0);
+})().catch(e=>{console.error(e);process.exit(1)});
+

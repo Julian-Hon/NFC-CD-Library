@@ -6,16 +6,26 @@
   <meta name="theme-color" content="#f7f7f5">
   <meta name="description" content="Digital CD Library — catalog your physical CD collection.">
   <title>Digital CD Library</title>
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
   <div class="page">
     <header class="site-header">
-      <a class="brand" href="index.html" aria-label="Digital CD Library home"><span class="brand-mark" aria-hidden="true">◉</span><span>Digital CD Library</span></a>
+      <a class="brand" href="index.html" aria-label="Digital CD Library home"><span class="brand-disc" aria-hidden="true"></span><span>Digital CD Library</span></a>
+      <nav id="view-switch" class="view-switch account-only" aria-label="Library view" hidden>
+        <button id="stack-view-button" data-view="stack" data-icon="stack" aria-pressed="true">Stack</button>
+        <button id="grid-view" data-view="grid" data-icon="grid" aria-pressed="false">Grid</button>
+        <button data-view="artists" data-icon="artists" aria-pressed="false">Artists</button>
+        <button data-view="genres" data-icon="genres" aria-pressed="false">Genres</button>
+        <button data-view="years" data-icon="years" aria-pressed="false">Years</button>
+      </nav>
+      <div class="header-actions account-only" hidden>
+        <label class="collection-search" data-icon="search"><span class="sr-only">Search your collection</span><input id="collection-search" type="search" placeholder="Search albums, artists..." autocomplete="off"></label>
+        <button id="add-cd" class="primary-button" data-icon="plus">Add CD</button>
+        <button id="reader-indicator" class="reader-indicator" data-icon="nfc" data-state="offline" aria-label="NFC reader status" aria-expanded="false" aria-controls="scan-panel" title="NFC reader offline"></button>
+      </div>
       <div id="auth-controls" class="auth-controls" hidden>
-        <span id="auth-user" class="auth-user" hidden></span>
-        <button id="auth-open" class="auth-button" type="button">Sign in</button>
-        <button id="auth-sign-out" class="auth-button" type="button" hidden>Sign out</button>
+        <details id="profile-menu" class="profile-menu"><summary aria-label="Account" data-icon="artists"></summary><div class="account-popover"><span id="auth-user" hidden></span><button id="auth-open">Sign in</button><button id="auth-sign-out" hidden>Sign out</button></div></details>
       </div>
     </header>
 
@@ -27,16 +37,7 @@
     </section>
 
     <main class="library" aria-labelledby="library-title" hidden>
-      <div class="section-heading">
-        <div><h1 id="library-title">My library<span class="period">.</span></h1><span id="cd-count" class="count">0 CDs</span></div>
-        <div class="library-actions">
-          <div id="view-switch" class="view-switch" role="group" aria-label="Library view">
-            <button id="grid-view" type="button" aria-pressed="false">Grid</button>
-            <button id="stack-view-button" type="button" aria-pressed="true">Stack</button>
-          </div>
-          <button id="add-cd" class="primary-button" type="button">+ Add CD</button>
-        </div>
-      </div>
+      <h1 id="library-title" class="sr-only">My CD library</h1>
       <p id="library-status" class="library-status" role="status" aria-live="polite"></p>
       <section id="scan-panel" class="scan-panel" aria-label="NFC scanner" hidden>
         <div class="scan-indicator" aria-hidden="true">◉</div>
@@ -49,27 +50,24 @@
       </section>
       <div id="album-grid" class="album-grid" aria-live="polite"></div>
       <section id="stack-view" class="stack-view" aria-label="CD stack" hidden>
-        <div class="stack-toolbar">
-          <div><span class="stack-eyebrow">THE COLLECTION</span><h2>A stack of your CDs.</h2><p class="stack-hint"><span class="hover-hint">Hover a spine to preview its cover. Click to open the CD.</span><span class="touch-hint">Tap a spine to preview its cover, then tap again for details.</span></p></div>
-          <button id="stack-motion" class="stack-motion" type="button" aria-pressed="true">Animation on</button>
-        </div>
         <div class="stack-layout">
           <div class="stack-stage">
-            <canvas id="stack-canvas" class="stack-canvas" aria-label="3D CD stack. Use arrow keys to select a CD and Enter to open it." tabindex="0"></canvas>
+            <canvas id="stack-canvas" class="stack-canvas" aria-label="3D CD stack. Use arrow keys to select a CD. Use Track list to open its details." tabindex="0"></canvas>
             <div id="cd-stack" class="cd-stack" aria-label="CD case spines"></div>
           </div>
           <aside class="stack-preview" aria-label="Selected CD preview" aria-live="polite">
             <span id="stack-position" class="stack-position"></span>
             <div id="stack-preview-cover" class="stack-preview-cover"></div>
-            <span class="stack-preview-label">SELECTED ALBUM</span>
+
             <h3 id="stack-album"></h3>
             <p id="stack-artist"></p>
             <p id="stack-edition" class="stack-edition"></p>
             <div class="stack-preview-actions">
-              <button id="stack-previous" class="stack-arrow" type="button" aria-label="Previous CD">←</button>
-              <button id="stack-open" class="stack-open" type="button">View CD details</button>
-              <button id="stack-next" class="stack-arrow" type="button" aria-label="Next CD">→</button>
+              <button id="stack-open" class="primary-button" data-icon="tracks">Track list</button>
+              <button id="favorite-cd" class="icon-button" data-icon="heart" aria-label="Favorite album" aria-pressed="false"></button>
+              <details id="album-more" class="album-more"><summary class="icon-button" aria-label="More album actions" data-icon="more"></summary><div class="album-menu"><button id="more-details">View CD details</button><button id="more-remove">Remove CD…</button></div></details>
             </div>
+            <p id="favorite-status" class="status" role="status"></p>
           </aside>
         </div>
       </section>
@@ -79,8 +77,14 @@
         <h2 id="empty-title">No CDs yet.</h2>
         <p id="empty-description">Add an album to start your library, then explore it in Grid or Stack view.</p>
       </div>
-      <p class="storage-note">Your CDs are saved to your account and appear when you sign in on another browser.</p>
+      <div class="stack-controls" id="stack-controls" hidden>
+        <div class="browse-controls"><button id="stack-previous" aria-label="Previous CD">←</button><span id="stack-range"></span><button id="stack-next" aria-label="Next CD">→</button></div>
+        <span class="stack-hint">Hover to browse · Click to select</span>
+        <button id="stack-motion" class="stack-motion" aria-pressed="true">Animation on</button>
+      </div>
     </main>
+    <footer class="library-footer account-only" hidden><span id="cd-count">0 CDs</span><label class="footer-view" data-icon="stack"><span class="sr-only">Current library view</span><select id="footer-view"><option value="stack">Stack view</option><option value="grid">Grid view</option><option value="artists">Artists view</option><option value="genres">Genres view</option><option value="years">Years view</option></select></label></footer>
+    <div id="scan-toast" class="scan-toast" role="status" hidden></div>
   </div>
 
   <dialog id="cd-dialog" aria-labelledby="dialog-title">
@@ -115,8 +119,9 @@
   </dialog>
   <script src="supabase-config.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-  <script src="auth.js?v=3" defer></script>
-  <script src="app.js?v=11" defer></script>
-  <script type="module" src="stack-3d.js?v=2"></script>
+  <script src="auth.js?v=4" defer></script>
+  <script src="library-ui.js?v=1" defer></script>
+  <script src="app.js?v=12" defer></script>
+  <script type="module" src="stack-3d.js?v=3"></script>
 </body>
 </html>
